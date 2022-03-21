@@ -62,6 +62,8 @@ ReproIsotopes <- subset(bearhairisotopes, sex!="M")
 
 ```
 
+This analysis will also focus on cortisol concentrations extracted from brown bear hair
+
 ```{r}
 
 
