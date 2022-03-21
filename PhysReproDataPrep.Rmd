@@ -1,0 +1,69 @@
+---
+title: "PhysReproDataPrep"
+author: "Ashlee Mikkelsen"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This Rmarkdownd will go through data prep for analysis of the physiological indicators of reproduction in brown bears (*Ursus arctos arctos*) in Sweden
+
+```{r load packages, include=FALSE}
+# clear workspace and load packages
+rm(list = ls())
+
+setwd("C:\\Users\\amikk\\PhD\\DataFiles\\HairData_SI")
+
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(viridis)
+
+```
+
+```{r load data, include=FALSE}
+
+bearhairisotopes <-read_excel("BrownBearMixtures.xlsx")
+
+
+```
+
+The first step is to correct the 𝛅13C values for the Suess effect due to human burning of fossil fuels. Following Chamerlain *et al.* 2005, I use a time-dependent correction of -0.022‰ for each year up to the last year in my data set.
+
+```{r}
+
+LastYr <- max(bearhairisotopes$year)
+
+bearhairisotopes$C13.suess <- bearhairisotopes$C13-(-0.022*(LastYr-bearhairisotopes$year))
+
+P2 <- palette(viridis(4))
+
+ggplot(data = bearhairisotopes)+
+  geom_jitter(aes(year,C13), color=P2[1], alpha=0.5, width = 0.3)+
+  geom_jitter(aes(year, C13.suess), color=P2[2],alpha=0.5,width = 0.3)+
+  geom_smooth(aes(year,C13), lwd=1, color=P2[1], fill=P2[1], method = "lm", alpha=0.2)+
+  geom_smooth(aes(year,C13.suess),lwd=2, color=P2[2], fill=P2[2], method = "lm", alpha=0.25)+
+  geom_text(label="With Suess Correction", colour=P2[2], x=2006, y=-21.5, size=6.5)+
+  geom_text(label="Without Correction", colour=P2[1], x=2006, y=-21.6, size=6)+
+  theme_classic()
+
+
+```
+
+Next, this analysis is going to focus on reproduction, so I only want to look at females
+
+```{r}
+
+ReproIsotopes <- subset(bearhairisotopes, sex!="M")
+
+
+```
+
+```{r}
+
+
+
+```
