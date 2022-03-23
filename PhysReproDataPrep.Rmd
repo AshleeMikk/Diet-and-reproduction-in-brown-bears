@@ -15,7 +15,6 @@ This Rmarkdownd will go through data prep for analysis of the physiological indi
 # clear workspace and load packages
 rm(list = ls())
 
-setwd("C:\\Users\\amikk\\PhD\\DataFiles\\HairData_SI")
 
 library(readxl)
 library(dplyr)
@@ -26,8 +25,48 @@ library(viridis)
 
 ```{r load data, include=FALSE}
 
-bearhairisotopes <-read_excel("BrownBearMixtures.xlsx")
+rawdata <- read_excel("RawBearData_SI_CORT.xlsx")
+str(rawdata)
 
+
+```
+
+So I have my raw data loaded and it needs a lot of work to be usable for analysis. I need to correct the cortisol for the difference between extraction kits. I need to correct the 13C for the Suess effect, I need to extract the females from this files and I need to determine how many NAs are present and what to do with them. Do I remove them or do I populate their missing data?
+
+I guess the first step will be correcting the cortisol. This means that I need to use the equation published in Wilson et al. 2021. Now this analysis is focused only on females, so I guess it actually makes more sense to first isolate females, then apply the female specific correction rather than the general correction to my data.
+
+$$
+cortisol from kit 2 = 1.98 + (0.89 * cortisol from kit 1)
+$$
+
+```{r isolate females and correct cortisol}
+
+bears.fem <- subset(rawdata, sex=="F")
+
+kit <- bears.fem$cort.kit
+print(kit)
+cort.raw <- as.numeric(bears.fem$cortisol)
+cort.corrected <- c()
+
+df <-cbind(kit,cort.raw, cort.corrected)
+
+kit1correction <- function(x,y){
+  y=1.98+(0.89*x)
+}
+
+kit2correction <- function(x,y){
+  y=x*1
+}
+
+for (i in kit) {
+  cort.corrected <- paste(kit1correction(cort.raw))
+}
+
+for (i in df) {
+  if(i="1"){
+    cort.corrected <- paste(kit1correction(cort.raw))
+  }
+}
 
 ```
 
