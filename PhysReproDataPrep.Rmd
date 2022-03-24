@@ -20,6 +20,7 @@ library(readxl)
 library(dplyr)
 library(ggplot2)
 library(viridis)
+library(tidyverse)
 
 ```
 
@@ -37,7 +38,7 @@ So I have my raw data loaded and it needs a lot of work to be usable for analysi
 I need remove quantify the records with missing values. 149 females do not have cortisol values and of these, 35 are missing stable isotope data. For now, let's remove these.
 ```{r remove NAs}
 
-bears.fem <- subset(rawdata, sex=="F")
+bears.fem <- subset(rawdata, reprostatus.represent!="SolitaryM")
 bears.fem.cort <- subset(bears.fem, cortisol!="NA")
 bears.fem.cort.si <- subset(bears.fem.cort, N15!="NA")
 
@@ -45,10 +46,10 @@ bears.fem.cort.si <- subset(bears.fem.cort, N15!="NA")
 ```
 
 
-I guess the first step will be correcting the cortisol. This means that I need to use the equation published in Wilson et al. 2021. Now this analysis is focused only on females, so I guess it actually makes more sense to first isolate females, then apply the female specific correction rather than the general correction to my data.
+I guess the first step will be correcting the cortisol. This means that I need to use the equation published in Wilson et al. 2021. While this analysis focuses on females, it also includes cubs-yearlings, which include males. Therefore the general cortisol correction is ideal
 
 $$
-cortisol from kit 2 = 1.98 + (0.89 * cortisol from kit 1)
+cortisol from kit 2 = 1.65 + (0.98 * cortisol from kit 1)
 $$
 
 ```{r isolate females and correct cortisol}
@@ -56,7 +57,7 @@ $$
 kit <- bears.fem.cort.si$cort.kit
 print(kit)
 cort.raw <- as.numeric(bears.fem.cort.si$cortisol)
-cort.corrected <-as.numeric(rep(0,472))
+cort.corrected <-as.numeric(rep(0,length(kit)))
 
 df <-as.data.frame(cbind("kit"=kit, "cort.raw"=as.numeric(cort.raw), "cort.corrected"=as.numeric(cort.corrected)))
 df$cort.raw <- as.numeric(df$cort.raw)
@@ -67,7 +68,7 @@ print(df[2,2])
 
 
 kit1correction <- function(x,y){
-  y=1.98+(0.89*x)
+  y=1.65+(0.98*x)
 }
 
 kit2correction <- function(x,y){
@@ -97,6 +98,96 @@ bears.fem.cort.si$C13 <- as.numeric(bears.fem.cort.si$C13)
 C13.suess <- bears.fem.cort.si$C13-(-0.022*(LastYr-bears.fem.cort.si$year.represent))
 bears.fem.cort.si$C13.suess <- C13.suess
 
+
 ```
 
+
+It looks like there are a few more housekeeping issues to address
+```{r}
+bears.repro <- subset(bears.fem.cort.si, reprostatus.represent!="NA")
+bears.repro$N15 <- as.numeric(bears.repro$N15)
+bear.reprodata <- bears.repro %>%
+  rename(
+    repro=reprostatus.represent,
+    year=year.represent,
+    bearyear=bearyear.represent,
+    cort= cortisol.kitcorrected
+  )
+
+
+```
+
+
+### Moving from Data clean+up to initail data exploration
+
+
+Now that I have removed any records with missing values and corrected my cortisol and stable isotope data, I can begin exploring my data.
+
+For simplicity, I save my dataframe as a .csv, clear my workspace, then re-load the .csv
+
+```{r}
+
+write.csv(bear.reprodata,"bearreprodata.csv")
+
+rm(list=ls())
+gc()
+
+bear.reprodata <- read.csv("bearreprodata.csv")
+
+
+```
+
+One of the main tenants of this analysis is how N15 and cortisol are going to change with reproductive status and between family groups
+
+So we graph N15 by repro group
+
+```{r}
+
+ggplot(data = bear.reprodata, aes(repro, N15))+
+  geom_jitter(aes(color=repro), alpha=0.4, width = 0.05)+
+  geom_violin(aes(group=repro, fill=repro), alpha=0.3)+
+  scale_color_viridis(discrete = TRUE)+
+  scale_fill_viridis(discrete = TRUE)+
+  theme_classic()
+
+```
+
+we graph N15 by cort
+
+```{r}
+
+ggplot(data = bear.reprodata, aes(N15, cort))+
+  geom_point(alpha=0.5)+
+  theme_classic()
+
+
+```
+
+
+
+and we graph both N15 and cort by year
+```{r}
+ggplot(data = bear.reprodata, aes(year,N15))+
+  geom_jitter(width = 0.01, alpha=0.6,size=3)+
+  theme_classic()+
+  scale_color_viridis(discrete = TRUE)
+# Well, this is weird
+
+ggplot(data = bear.reprodata, aes(year, cort))+
+  geom_jitter(width = 0.1, alpha=0.6, size=3)+
+  theme_classic()
+
+```
+
+
+I expect that cort and N15 should be related to body condition, so we have both weight and head circumference.
+```{r}
+
+
+
+
+
+
+
+```
 
