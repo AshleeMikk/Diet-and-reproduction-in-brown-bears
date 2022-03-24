@@ -33,6 +33,18 @@ str(rawdata)
 
 So I have my raw data loaded and it needs a lot of work to be usable for analysis. I need to correct the cortisol for the difference between extraction kits. I need to correct the 13C for the Suess effect, I need to extract the females from this files and I need to determine how many NAs are present and what to do with them. Do I remove them or do I populate their missing data?
 
+### Data Cleanup
+I need remove quantify the records with missing values. 149 females do not have cortisol values and of these, 35 are missing stable isotope data. For now, let's remove these.
+```{r remove NAs}
+
+bears.fem <- subset(rawdata, sex=="F")
+bears.fem.cort <- subset(bears.fem, cortisol!="NA")
+bears.fem.cort.si <- subset(bears.fem.cort, N15!="NA")
+
+
+```
+
+
 I guess the first step will be correcting the cortisol. This means that I need to use the equation published in Wilson et al. 2021. Now this analysis is focused only on females, so I guess it actually makes more sense to first isolate females, then apply the female specific correction rather than the general correction to my data.
 
 $$
@@ -41,70 +53,50 @@ $$
 
 ```{r isolate females and correct cortisol}
 
-bears.fem <- subset(rawdata, sex=="F")
-
-kit <- bears.fem$cort.kit
+kit <- bears.fem.cort.si$cort.kit
 print(kit)
-cort.raw <- as.numeric(bears.fem$cortisol)
-cort.corrected <- c()
+cort.raw <- as.numeric(bears.fem.cort.si$cortisol)
+cort.corrected <-as.numeric(rep(0,472))
 
-df <-cbind(kit,cort.raw, cort.corrected)
+df <-as.data.frame(cbind("kit"=kit, "cort.raw"=as.numeric(cort.raw), "cort.corrected"=as.numeric(cort.corrected)))
+df$cort.raw <- as.numeric(df$cort.raw)
+df$cort.corrected <- as.numeric(df$cort.corrected)
+
+str(df)
+print(df[2,2])
+
 
 kit1correction <- function(x,y){
   y=1.98+(0.89*x)
 }
 
 kit2correction <- function(x,y){
-  y=x*1
+  y=(x*1)
 }
 
-for (i in kit) {
-  cort.corrected <- paste(kit1correction(cort.raw))
-}
-
-for (i in df) {
-  if(i="1"){
-    cort.corrected <- paste(kit1correction(cort.raw))
+for (i in 1:length(df[,1])) {
+  if(df[i,1]=="1"){
+    df[i,3] <- kit1correction(df[i,2])
+  } else {
+    df[i,3] <- kit2correction(df[i,2])
   }
 }
 
+bears.fem.cort.si$cortisol.kitcorrected <- df$cort.corrected
+
 ```
 
-The first step is to correct the 𝛅13C values for the Suess effect due to human burning of fossil fuels. Following Chamerlain *et al.* 2005, I use a time-dependent correction of -0.022‰ for each year up to the last year in my data set.
+The next step is to correct the 𝛅13C values for the Suess effect due to human burning of fossil fuels. Following Chamerlain *et al.* 2005, I use a time-dependent correction of -0.022‰ for each year up to the last year in my data set.
 
 ```{r}
 
-LastYr <- max(bearhairisotopes$year)
+LastYr <- as.numeric(max(bears.fem.cort.si$year.represent))
+bears.fem.cort.si$year.represent <- as.numeric(bears.fem.cort.si$year.represent)
+bears.fem.cort.si$C13 <- as.numeric(bears.fem.cort.si$C13)
 
-bearhairisotopes$C13.suess <- bearhairisotopes$C13-(-0.022*(LastYr-bearhairisotopes$year))
-
-P2 <- palette(viridis(4))
-
-ggplot(data = bearhairisotopes)+
-  geom_jitter(aes(year,C13), color=P2[1], alpha=0.5, width = 0.3)+
-  geom_jitter(aes(year, C13.suess), color=P2[2],alpha=0.5,width = 0.3)+
-  geom_smooth(aes(year,C13), lwd=1, color=P2[1], fill=P2[1], method = "lm", alpha=0.2)+
-  geom_smooth(aes(year,C13.suess),lwd=2, color=P2[2], fill=P2[2], method = "lm", alpha=0.25)+
-  geom_text(label="With Suess Correction", colour=P2[2], x=2006, y=-21.5, size=6.5)+
-  geom_text(label="Without Correction", colour=P2[1], x=2006, y=-21.6, size=6)+
-  theme_classic()
-
+C13.suess <- bears.fem.cort.si$C13-(-0.022*(LastYr-bears.fem.cort.si$year.represent))
+bears.fem.cort.si$C13.suess <- C13.suess
 
 ```
 
-Next, this analysis is going to focus on reproduction, so I only want to look at females
 
-```{r}
-
-ReproIsotopes <- subset(bearhairisotopes, sex!="M")
-
-
-```
-
-This analysis will also focus on cortisol concentrations extracted from brown bear hair
-
-```{r}
-
-
-
-```
