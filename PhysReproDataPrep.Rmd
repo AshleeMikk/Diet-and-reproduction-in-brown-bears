@@ -14,7 +14,7 @@ This Rmarkdownd will go through data prep for analysis of the physiological indi
 ```{r load packages, include=FALSE}
 # clear workspace and load packages
 rm(list = ls())
-
+setwd("~/Rprojects/Diet-and-reproduction-in-rown-bears")
 
 library(readxl)
 library(dplyr)
@@ -102,39 +102,35 @@ bears.fem.cort.si$C13.suess <- C13.suess
 ```
 
 
-It looks like there are a few more housekeeping issues to address
+It looks like there are a few more housekeeping issues to address. A common metric of body condition is mass or mass scaled by a body measurement. In this case, we have mass and head circumference. I will create a body condition metric based on these two measurements
+
 ```{r}
 bears.repro <- subset(bears.fem.cort.si, reprostatus.represent!="NA")
 bears.repro$N15 <- as.numeric(bears.repro$N15)
+
+bears.repro$weight <- as.numeric(bears.repro$weight)
+bears.repro$headcirc <- as.numeric(bears.repro$headcirc)
+bears.repro$condition <- bears.repro$weight/bears.repro$headcirc
+# Bears will have a higher body condition index as the ratio between head circumference, which is a good measure of the overall skeletal size, and their mass increases. For example, a bear with really high mass and a small head means they are a smaller bear with greater fet reserves, muscle mass, or organs. All three of these equate to plentiful resource availability
+
 bear.reprodata <- bears.repro %>%
   rename(
     repro=reprostatus.represent,
     year=year.represent,
     bearyear=bearyear.represent,
-    cort= cortisol.kitcorrected
+    cort= cortisol.kitcorrected,
+    mass=weight
   )
 
 
 ```
 
 
-### Moving from Data clean+up to initail data exploration
-
-
-Now that I have removed any records with missing values and corrected my cortisol and stable isotope data, I can begin exploring my data.
-
-For simplicity, I save my dataframe as a .csv, clear my workspace, then re-load the .csv
+Finally, we save our datafile
 
 ```{r}
 
 write.csv(bear.reprodata,"bearreprodata.csv")
-
-rm(list=ls())
-gc()
-
-bear.reprodata <- read.csv("bearreprodata.csv")
-
-
 ```
 
 One of the main tenants of this analysis is how N15 and cortisol are going to change with reproductive status and between family groups
