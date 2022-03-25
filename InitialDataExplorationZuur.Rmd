@@ -1,0 +1,137 @@
+---
+title: "Initial Data Exploration following Zuur"
+author: "Ashlee Mikkelsen"
+date: '`r Sys.Date()`'
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Moving from Data clean-up to initail data exploration
+
+In the PhysReproDataPrep.Rmd I went through and cleaned up and corrected my data.
+Now that I have removed any records with missing values and corrected my cortisol and stable isotope data, I can begin exploring my data.
+
+For my data exploration process, I will be following procedures described in "Mixed Effects Models and Extensions in Ecology with R" by Zuur et al. (2009)
+
+
+```{r}
+rm(list = ls())
+setwd("~/Rprojects/Diet-and-reproduction-in-rown-bears")
+
+library(ggplot2)
+library(dplyr)
+library(GGally)
+library(viridis)
+
+
+bear.reprodata <- read.csv("bearreprodata.csv")
+
+
+
+```
+
+
+### Zuur 2.1
+
+#### Cleveland Dot Plots
+
+Identifying outliers and violations of homogeneity. Below I use Cleveland dotplots for N15 and cort
+
+```{r}
+# Cleveland dotplot to ID outliers
+
+# First we look at 15N
+dotchart(bear.reprodata$N15,
+         groups = factor(bear.reprodata$repro),
+         ylab= "Reproductive Category",
+         xlab="Delta 15N",
+         main="Cleveland Dotplot",
+         pch=bear.reprodata$repro)
+
+# The spread of the data within each category looks good. There looks like there is one outlier in the WithMothercategory.
+
+
+# Now for cortisol
+dotchart(bear.reprodata$cortisol.kitcorrected,
+         groups = factor(bear.reprodata$repro),
+         ylab= "Reproductive Category",
+         xlab="Hair Cortisol",
+         main="Cleveland Dotplot",
+         pch=bear.reprodata$repro)
+
+# Cortisol is a different story from 15N. There are several outliers in the Soliary female category and one in the WithCubs category. All three categories have similar spreads, but there does seem to be some structure to this, possibly violating our assumptions of homogeneity.
+
+
+```
+
+#### Pair Plots
+
+In addition to the dot plots, we also look at pairplots to identify any ovious relationships or correlations that may mess up our analysis if they are unaccounted for. However, this is a fairly large data file and we don't want to see a pair-plot of all 24 variables. So I create a seperate table just for the pairplots
+```{r}
+
+PP.Table <- as.data.frame(cbind(bear.reprodata$year,bear.reprodata$age, bear.reprodata$N15, bear.reprodata$mass,bear.reprodata$headcirc,bear.reprodata$cortisol.kitcorrected, bear.reprodata$C13.suess, bear.reprodata$condition))
+
+colnames(PP.Table) <- c("year","age","N15","mass","headcirc",
+                        "cort","C13.suess","condition")
+sapply(1:8, function(i) {
+  PP.Table[, i] <<- as.numeric(as.character(PP.Table[, i]))
+})
+
+?pairs
+pairs.panels(PP.Table)
+ggpairs(PP.Table)
+
+```
+##### Inferences from pair plots
+
+###### year
+
+There are some interesting patterns that are obvious between year and several other variables that may be interesting but may also be  problematic. 
+  Year and mass, head circumference, and body condition shows the differences between cubs/yearlings and adults which is fine. Year and both stable isotopes have a distinct cyclic pattern which may alos be mirrored, but less distinctly in the mass and body metric data. This is very interesting. Cort looks to be violation our assumption of normality as the variance in cortisol increases over time.
+  
+###### age
+
+Age looks to be problematic for several variables. There is decreasing variation in N15, cortisol, and 13C with age. In addition, (not surprisingly) age has a non-linear relationship with our body metrics
+
+###### N15
+
+There looks to be an irregular distribution of varaince in 15N as cortisol increases
+
+###### Mass
+
+Unsurprisingly, mass is tightly correlated with head circumference and body condition
+
+
+#### Boxplots
+
+I start by looking at box plots across the obvious groups, the reproductive categories
+```{r}
+
+ggplot(data = bear.reprodata, aes(repro,N15))+
+  geom_boxplot(aes(group=repro, fill=repro))+
+  scale_fill_viridis(discrete = TRUE)+
+  theme_classic()
+# Again, we see some indications that there are a few outliers.
+
+ggplot(data = bear.reprodata, aes(repro,cortisol.kitcorrected))+
+  geom_boxplot(aes(group=repro, fill=repro))+
+  scale_fill_viridis(discrete = TRUE)+
+  theme_classic()
+# Here we see some outliers, mostly grouped in the Solitary female category
+
+ggplot(data = bear.reprodata, aes(repro,condition))+
+  geom_boxplot(aes(group=repro, fill=repro))+
+  scale_fill_viridis(discrete = TRUE)+
+  theme_classic()
+# This is a bit surprising, I expected solitary females to have the highest body condition. This could be driven by the general life-history of brown bears in that only bears that meet a certain threshold are able to reproduce, thus we may have a bunch of females who are unable to accumulate enough fat to reproduce in with the solitary female category. We assume this category is mostly femlaes who have just seperated from their litter and are looking to reproduce, but this may not be the case.
+
+```
+##### Inference from box plots 
+
+We see some indications of outliers, particularly in the cortisol of solitary females. The most interesting pattern we see is body condition between the three reproductive categories. I expected solitary females to have the highest body condition. This could be driven by the general life-history of brown bears in that only bears that meet a certain threshold are able to reproduce, thus we may have a bunch of females who are unable to accumulate enough fat to reproduce in with the solitary female category. We assume this category is mostly femlaes who have just seperated from their litter and are looking to reproduce, but this may not be the case.
+
+#### Zuur 2.2 Linear Regression Models
+

@@ -89,13 +89,17 @@ bears.fem.cort.si$cortisol.kitcorrected <- df$cort.corrected
 
 The next step is to correct the 𝛅13C values for the Suess effect due to human burning of fossil fuels. Following Chamerlain *et al.* 2005, I use a time-dependent correction of -0.022‰ for each year up to the last year in my data set.
 
+$$
+13C_(Suess_) = 13C_(year_(_i_)) 
+$$
+
 ```{r}
 
 LastYr <- as.numeric(max(bears.fem.cort.si$year.represent))
 bears.fem.cort.si$year.represent <- as.numeric(bears.fem.cort.si$year.represent)
 bears.fem.cort.si$C13 <- as.numeric(bears.fem.cort.si$C13)
 
-C13.suess <- bears.fem.cort.si$C13-(-0.022*(LastYr-bears.fem.cort.si$year.represent))
+C13.suess <- bears.fem.cort.si$C13-(+0.022*(LastYr-bears.fem.cort.si$year.represent))
 bears.fem.cort.si$C13.suess <- C13.suess
 
 
@@ -112,13 +116,29 @@ bears.repro$weight <- as.numeric(bears.repro$weight)
 bears.repro$headcirc <- as.numeric(bears.repro$headcirc)
 bears.repro$condition <- bears.repro$weight/bears.repro$headcirc
 # Bears will have a higher body condition index as the ratio between head circumference, which is a good measure of the overall skeletal size, and their mass increases. For example, a bear with really high mass and a small head means they are a smaller bear with greater fet reserves, muscle mass, or organs. All three of these equate to plentiful resource availability
+```
 
+Most of the data was stored as characters which is really annoying. There is a better way to do this, but I am just going to go through and fix most of these right now
+```{r}
+bears.repro$fYEAR <- bears.repro$year.represent
+bears.repro$year.represent <- as.numeric(bears.repro$year.represent)
+bears.repro$age <- as.numeric(bears.repro$age)
+bears.repro$fAGE <- as.factor(bears.repro$age)
+bears.repro$weight <- as.numeric(bears.repro$weight)
+
+
+
+
+```
+
+
+
+```{r}
 bear.reprodata <- bears.repro %>%
   rename(
     repro=reprostatus.represent,
     year=year.represent,
     bearyear=bearyear.represent,
-    cort= cortisol.kitcorrected,
     mass=weight
   )
 
@@ -133,57 +153,4 @@ Finally, we save our datafile
 write.csv(bear.reprodata,"bearreprodata.csv")
 ```
 
-One of the main tenants of this analysis is how N15 and cortisol are going to change with reproductive status and between family groups
-
-So we graph N15 by repro group
-
-```{r}
-
-ggplot(data = bear.reprodata, aes(repro, N15))+
-  geom_jitter(aes(color=repro), alpha=0.4, width = 0.05)+
-  geom_violin(aes(group=repro, fill=repro), alpha=0.3)+
-  scale_color_viridis(discrete = TRUE)+
-  scale_fill_viridis(discrete = TRUE)+
-  theme_classic()
-
-```
-
-we graph N15 by cort
-
-```{r}
-
-ggplot(data = bear.reprodata, aes(N15, cort))+
-  geom_point(alpha=0.5)+
-  theme_classic()
-
-
-```
-
-
-
-and we graph both N15 and cort by year
-```{r}
-ggplot(data = bear.reprodata, aes(year,N15))+
-  geom_jitter(width = 0.01, alpha=0.6,size=3)+
-  theme_classic()+
-  scale_color_viridis(discrete = TRUE)
-# Well, this is weird
-
-ggplot(data = bear.reprodata, aes(year, cort))+
-  geom_jitter(width = 0.1, alpha=0.6, size=3)+
-  theme_classic()
-
-```
-
-
-I expect that cort and N15 should be related to body condition, so we have both weight and head circumference.
-```{r}
-
-
-
-
-
-
-
-```
 
