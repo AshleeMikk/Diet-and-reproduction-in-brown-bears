@@ -25,8 +25,9 @@ library(ggplot2)
 library(dplyr)
 library(GGally)
 library(viridis)
+library(lme4)
 
-
+P <- palette(viridis(8))
 bear.reprodata <- read.csv("bearreprodata.csv")
 
 
@@ -80,7 +81,6 @@ sapply(1:8, function(i) {
   PP.Table[, i] <<- as.numeric(as.character(PP.Table[, i]))
 })
 
-?pairs
 pairs.panels(PP.Table)
 ggpairs(PP.Table)
 
@@ -134,4 +134,60 @@ ggplot(data = bear.reprodata, aes(repro,condition))+
 We see some indications of outliers, particularly in the cortisol of solitary females. The most interesting pattern we see is body condition between the three reproductive categories. I expected solitary females to have the highest body condition. This could be driven by the general life-history of brown bears in that only bears that meet a certain threshold are able to reproduce, thus we may have a bunch of females who are unable to accumulate enough fat to reproduce in with the solitary female category. We assume this category is mostly femlaes who have just seperated from their litter and are looking to reproduce, but this may not be the case.
 
 #### Zuur 2.2 Linear Regression Models
+
+Zuur recommends running some basic linear regression models so that you can examine resulting q-q plots and residuals to test for violations of the underlying assumptions of linear modsels and to determine the strength of outliers.
+
+While time is a component to all analyses, it is not a focus of this one, therefore I will use some models of 15N and cort by year to then look at some of theses issues
+
+```{r}
+mbear15N <- mean(bear.reprodata$N15)
+sdbear15N <- sd(bear.reprodata$N15)
+
+ggplot(data = bear.reprodata, aes(N15))+
+  geom_histogram(fill=P[1], alpha=0.8, binwidth = 0.25)+
+  theme_classic()
+# delta 15N has a good, normal distribution
+
+N15model <- lmer(N15~year+(1|BearID), data = bear.reprodata)
+summary(N15model)
+
+op <- par(mfrow=c(2,2), mar=c(5,4,1,2))
+plot(N15model, add.smooth=FALSE, which=1)
+N15e <- resid(N15model)
+hist(N15e, xlab = "Residuals")
+plot(bear.reprodata$N15, N15e, xlab = "Delta 15N",
+     ylab = "Residuals")
+par(op)
+
+
+
+
+```
+
+It looks like we have several issues here. In the graph of the fitted values versus the residuals, we have a clear linear correlation, especially at higher fitted values. The residuals are normally distributed in the histogram, but again, when we look at the relationship between 15N and residuals, the residuals become larger and 15 increases.
+
+```{r}
+
+mbear.cort <- mean(bear.reprodata$cortisol.kitcorrected)
+sdbear.cort <- sd(bear.reprodata$cortisol.kitcorrected)
+
+ggplot(data = bear.reprodata, aes(cortisol.kitcorrected))+
+  geom_histogram(binwidth = 1.75, fill=P[2], alpha=0.8)+
+  theme_classic()
+# The cortisol values are left skewed with a long tail. May need to be transformed
+
+CORTmodel <- lmer(cortisol.kitcorrected~year+(1|BearID), data = bear.reprodata)
+summary(CORTmodel)
+
+op <- par(mfrow=c(2,2), mar=c(5,4,1,2))
+plot(N15model, add.smooth=FALSE, which=1)
+N15e <- resid(N15model)
+hist(N15e, xlab = "Residuals")
+plot(bear.reprodata$N15, N15e, xlab = "Delta 15N",
+     ylab = "Residuals")
+par(op)
+
+
+
+```
 
