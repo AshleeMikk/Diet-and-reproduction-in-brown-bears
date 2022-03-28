@@ -29,7 +29,7 @@ library(lme4)
 
 P <- palette(viridis(8))
 bear.reprodata <- read.csv("bearreprodata.csv")
-
+bear.reprodata$fYEAR <- as.factor(bear.reprodata$fYEAR)
 
 
 ```
@@ -139,16 +139,23 @@ Zuur recommends running some basic linear regression models so that you can exam
 
 While time is a component to all analyses, it is not a focus of this one, therefore I will use some models of 15N and cort by year to then look at some of theses issues
 
+###### Nitrogen Stable Isotopes 
+
 ```{r}
 mbear15N <- mean(bear.reprodata$N15)
 sdbear15N <- sd(bear.reprodata$N15)
+
+ggplot(data = bear.reprodata, aes(year, N15))+
+  geom_col()+
+  theme_classic()+
+  scale_x_continuous(breaks = seq(1995,2016,2))
 
 ggplot(data = bear.reprodata, aes(N15))+
   geom_histogram(fill=P[1], alpha=0.8, binwidth = 0.25)+
   theme_classic()
 # delta 15N has a good, normal distribution
 
-N15model <- lmer(N15~year+(1|BearID), data = bear.reprodata)
+N15model <- lm(N15~year, data = bear.reprodata)
 summary(N15model)
 
 op <- par(mfrow=c(2,2), mar=c(5,4,1,2))
@@ -156,38 +163,131 @@ plot(N15model, add.smooth=FALSE, which=1)
 N15e <- resid(N15model)
 hist(N15e, xlab = "Residuals")
 plot(bear.reprodata$N15, N15e, xlab = "Delta 15N",
-     ylab = "Residuals")
+     ylab = "Residuals", main = "Observed values vs. residuals")
+plot(bear.reprodata$year, N15e, xlab = "Year", ylab = "Residuals")
 par(op)
 
 
+op <-par(mfrow=c(2,2))
+plot(N15model)
+par(op)
+
+```
+
+It looks like we may have a few issues here. Based on the QQ-plot, our residulas are not completely normally distributed, particularly at the extremes. No values have a Cook's distance greater than 1, no no values need to be considered for removal. There is definitely something happenning with the residuals vs fitted plot. This follows the pattern of 15N by year. So we have a violation of homogeneity here and Åanel A indicates some problem wit independence.
+
+```{r}
+
+Nitro <- bear.reprodata$N15
+YR <- bear.reprodata$year
+plot(
+  y=Nitro, x=YR,
+  xlab="Year", 
+  ylab="Delta 15N"
+  )
+abline(N15model)
 
 
 ```
 
-It looks like we have several issues here. In the graph of the fitted values versus the residuals, we have a clear linear correlation, especially at higher fitted values. The residuals are normally distributed in the histogram, but again, when we look at the relationship between 15N and residuals, the residuals become larger and 15 increases.
+This is a graph of $\delta$15N values by year with the fitted line from the model N15~year
 
+###### Hair cortisol 
 ```{r}
-
 mbear.cort <- mean(bear.reprodata$cortisol.kitcorrected)
 sdbear.cort <- sd(bear.reprodata$cortisol.kitcorrected)
 
 ggplot(data = bear.reprodata, aes(cortisol.kitcorrected))+
-  geom_histogram(binwidth = 1.75, fill=P[2], alpha=0.8)+
+  geom_histogram(binwidth = sd(bear.reprodata$cortisol.kitcorrected)/2, fill=P[2], alpha=0.8)+
   theme_classic()
 # The cortisol values are left skewed with a long tail. May need to be transformed
+bear.reprodata$ln.cortisol <- log(bear.reprodata$cortisol.kitcorrected)
+sd(bear.reprodata$ln.cortisol)/2
+ggplot(data = bear.reprodata, aes(ln.cortisol))+
+  geom_histogram(binwidth =sd(bear.reprodata$ln.cortisol)/2 )+
+  theme_classic()
 
-CORTmodel <- lmer(cortisol.kitcorrected~year+(1|BearID), data = bear.reprodata)
+CORTmodel <- lm(cortisol.kitcorrected~year, 
+                  data = bear.reprodata)
 summary(CORTmodel)
 
-op <- par(mfrow=c(2,2), mar=c(5,4,1,2))
-plot(N15model, add.smooth=FALSE, which=1)
-N15e <- resid(N15model)
-hist(N15e, xlab = "Residuals")
-plot(bear.reprodata$N15, N15e, xlab = "Delta 15N",
-     ylab = "Residuals")
+op <-par(mfrow=c(2,2))
+plot(CORTmodel)
 par(op)
+```
+We definitely have some increasing variance as hair cortisol concentrations increase, and looking at the QQ-plot, the residuals are not normally distributed. The residuals are skewed with a long right-hand tail.
+
+```{r}
+ln.CORTmodel <- lm(ln.cortisol~year, 
+                  data = bear.reprodata)
+summary(ln.CORTmodel)
+
+op <-par(mfrow=c(2,2))
+plot(ln.CORTmodel)
+par(op)
+
+```
+
+Log-transforming the cortisol values gives us a much more normal distribution and variance structure, though there is still something going on here. Apparently year was not as inoccuos place to start as I thought it was.There might be some auto-correlation structure here. (Chee Zuur CH 5-7).
+
+
+###### Body condition
+
+```{r}
+mean.bc <- mean(bear.reprodata$condition)
+sd.bodycond <- sd(bear.reprodata$condition)
+
+ggplot(data = bear.reprodata, aes(year, condition))+
+  geom_point()+
+  theme_classic()
+ggplot(data = bear.reprodata, aes(condition))+
+  geom_histogram(aes(fill=repro))+
+  theme_classic()+
+  scale_fill_viridis(discrete = TRUE, end = 0.8, begin = 0.2)
 
 
 
 ```
 
+The distribution of body condition is fairly bi-modal, which can mostly be explained by differences in life-history. The majority of bears in poorer condition are cubs or yearlings still with their mothers. However, there are some very intriguing solitary females with poor body condition.
+
+
+```{r}
+
+
+CONDmodel <- lm(condition~year, data = bear.reprodata)
+summary(CONDmodel)
+
+op <-par(mfrow=c(2,2))
+plot(CONDmodel)
+par(op)
+
+```
+
+We have a lot of violations here, but it might be related to reproductive status. 
+
+
+##### Saturated Model
+
+```{r}
+
+SATmodel <- lm(cortisol.kitcorrected~year+C13.suess+N15+
+                 condition+age+repro+repro*N15+condition*repro,
+               data = bear.reprodata)
+summary(SATmodel)
+
+op <-par(mfrow=c(2,2))
+plot(SATmodel)
+par(op)
+
+```
+
+Even when we consider almost all explanetory variables and interactions, we still violate assumptions of normality
+
+
+##### Zuur 2.2 summary
+
+We may need to transform cortisol to meet the assumptions of normality
+year may be auto-correlated
+The body condition metric violates a lot of the linear regression assumptions
+We may need to use a generalized rather than general linear regression model.

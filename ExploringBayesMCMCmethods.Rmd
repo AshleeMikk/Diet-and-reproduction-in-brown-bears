@@ -1,0 +1,34 @@
+---
+title: "Exploring Bayesian Linear Regression Analysis"
+author: "Ashlee Mikkelsen"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+rm(list = ls())
+gc()
+setwd("~/Rprojects/Diet-and-reproduction-in-rown-bears")
+
+library(ggplot2)
+library(dplyr)
+library(GGally)
+library(viridis)
+library(lme4)
+
+P <- palette(viridis(8))
+bear.reprodata <- read.csv("bearreprodata.csv")
+bear.reprodata$fYEAR <- as.factor(bear.reprodata$fYEAR)
+
+
+```
+
+I previously determine that my data has some auto-correlation and underlying variance structures that violate the assumptions of linear regression modeling. I am now going to explore using Bayesian methods and MCMC to model my data.
+
+This .Rmd follows Chapter 23 in "Mixed Effects Models and Extensions in Ecology with R" by Zuur et al. (2009).
+
