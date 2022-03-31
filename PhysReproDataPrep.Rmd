@@ -26,9 +26,14 @@ library(tidyverse)
 
 ```{r load data, include=FALSE}
 
-rawdata <- read_excel("RawBearData_SI_CORT.xlsx")
+rawdata<- read_excel("RawBearData_SI_CORT.xlsx", 
+    col_types = c("text", "text", "text", 
+        "text", "text", "text", "text", 
+        "text", "text", "text", "text", "text", 
+        "text", "text", "text", "text", 
+        "date", "text", "text", "text"))
 str(rawdata)
-
+warnings()
 
 ```
 
@@ -146,11 +151,25 @@ bear.reprodata <- bears.repro %>%
 ```
 
 
+
+
+```{r}
+bear.reprodata$Cmonth<-as.numeric(format(bear.reprodata$capturedate,"%m"))
+ggplot(data = bear.reprodata, aes(Cmonth))+
+  geom_bar()
+# Need to remove bears captured after june
+bear.reprodata.capture <- subset(bear.reprodata, Cmonth<7)
+ggplot(data = bear.reprodata.capture, aes(Cmonth))+
+  geom_bar()
+
+```
+
+
 Finally, we save our datafile
 
 ```{r}
 
-write.csv(bear.reprodata,"bearreprodata.csv")
+write.csv(bear.reprodata.capture,"bearreprodata.csv")
 ```
 
 

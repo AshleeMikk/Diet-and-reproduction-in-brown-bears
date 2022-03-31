@@ -11,11 +11,9 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Moving from Data clean-up to initail data exploration
 
-In the PhysReproDataPrep.Rmd I went through and cleaned up and corrected my data.
-Now that I have removed any records with missing values and corrected my cortisol and stable isotope data, I can begin exploring my data.
+In the PhysReproDataPrep.Rmd I went through and cleaned up and corrected my data. Now that I have removed any records with missing values and corrected my cortisol and stable isotope data, I can begin exploring my data.
 
 For my data exploration process, I will be following procedures described in "Mixed Effects Models and Extensions in Ecology with R" by Zuur et al. (2009)
-
 
 ```{r}
 rm(list = ls())
@@ -30,10 +28,9 @@ library(lme4)
 P <- palette(viridis(8))
 bear.reprodata <- read.csv("bearreprodata.csv")
 bear.reprodata$fYEAR <- as.factor(bear.reprodata$fYEAR)
-
+bear.reprodata$Cmonth <- as.factor(bear.reprodata$Cmonth)
 
 ```
-
 
 ### Zuur 2.1
 
@@ -71,6 +68,7 @@ dotchart(bear.reprodata$cortisol.kitcorrected,
 #### Pair Plots
 
 In addition to the dot plots, we also look at pairplots to identify any ovious relationships or correlations that may mess up our analysis if they are unaccounted for. However, this is a fairly large data file and we don't want to see a pair-plot of all 24 variables. So I create a seperate table just for the pairplots
+
 ```{r}
 
 PP.Table <- as.data.frame(cbind(bear.reprodata$year,bear.reprodata$age, bear.reprodata$N15, bear.reprodata$mass,bear.reprodata$headcirc,bear.reprodata$cortisol.kitcorrected, bear.reprodata$C13.suess, bear.reprodata$condition))
@@ -85,13 +83,13 @@ pairs.panels(PP.Table)
 ggpairs(PP.Table)
 
 ```
+
 ##### Inferences from pair plots
 
 ###### year
 
-There are some interesting patterns that are obvious between year and several other variables that may be interesting but may also be  problematic. 
-  Year and mass, head circumference, and body condition shows the differences between cubs/yearlings and adults which is fine. Year and both stable isotopes have a distinct cyclic pattern which may alos be mirrored, but less distinctly in the mass and body metric data. This is very interesting. Cort looks to be violation our assumption of normality as the variance in cortisol increases over time.
-  
+There are some interesting patterns that are obvious between year and several other variables that may be interesting but may also be problematic. Year and mass, head circumference, and body condition shows the differences between cubs/yearlings and adults which is fine. Year and both stable isotopes have a distinct cyclic pattern which may alos be mirrored, but less distinctly in the mass and body metric data. This is very interesting. Cort looks to be violation our assumption of normality as the variance in cortisol increases over time.
+
 ###### age
 
 Age looks to be problematic for several variables. There is decreasing variation in N15, cortisol, and 13C with age. In addition, (not surprisingly) age has a non-linear relationship with our body metrics
@@ -104,10 +102,10 @@ There looks to be an irregular distribution of varaince in 15N as cortisol incre
 
 Unsurprisingly, mass is tightly correlated with head circumference and body condition
 
-
 #### Boxplots
 
 I start by looking at box plots across the obvious groups, the reproductive categories
+
 ```{r}
 
 ggplot(data = bear.reprodata, aes(repro,N15))+
@@ -129,7 +127,8 @@ ggplot(data = bear.reprodata, aes(repro,condition))+
 # This is a bit surprising, I expected solitary females to have the highest body condition. This could be driven by the general life-history of brown bears in that only bears that meet a certain threshold are able to reproduce, thus we may have a bunch of females who are unable to accumulate enough fat to reproduce in with the solitary female category. We assume this category is mostly femlaes who have just seperated from their litter and are looking to reproduce, but this may not be the case.
 
 ```
-##### Inference from box plots 
+
+##### Inference from box plots
 
 We see some indications of outliers, particularly in the cortisol of solitary females. The most interesting pattern we see is body condition between the three reproductive categories. I expected solitary females to have the highest body condition. This could be driven by the general life-history of brown bears in that only bears that meet a certain threshold are able to reproduce, thus we may have a bunch of females who are unable to accumulate enough fat to reproduce in with the solitary female category. We assume this category is mostly femlaes who have just seperated from their litter and are looking to reproduce, but this may not be the case.
 
@@ -139,7 +138,7 @@ Zuur recommends running some basic linear regression models so that you can exam
 
 While time is a component to all analyses, it is not a focus of this one, therefore I will use some models of 15N and cort by year to then look at some of theses issues
 
-###### Nitrogen Stable Isotopes 
+###### Nitrogen Stable Isotopes
 
 ```{r}
 mbear15N <- mean(bear.reprodata$N15)
@@ -190,9 +189,10 @@ abline(N15model)
 
 ```
 
-This is a graph of $\delta$15N values by year with the fitted line from the model N15~year
+This is a graph of \$\delta\$15N values by year with the fitted line from the model N15\~year
 
-###### Hair cortisol 
+###### Hair cortisol
+
 ```{r}
 mbear.cort <- mean(bear.reprodata$cortisol.kitcorrected)
 sdbear.cort <- sd(bear.reprodata$cortisol.kitcorrected)
@@ -215,6 +215,7 @@ op <-par(mfrow=c(2,2))
 plot(CORTmodel)
 par(op)
 ```
+
 We definitely have some increasing variance as hair cortisol concentrations increase, and looking at the QQ-plot, the residuals are not normally distributed. The residuals are skewed with a long right-hand tail.
 
 ```{r}
@@ -229,7 +230,6 @@ par(op)
 ```
 
 Log-transforming the cortisol values gives us a much more normal distribution and variance structure, though there is still something going on here. Apparently year was not as inoccuos place to start as I thought it was.There might be some auto-correlation structure here. (Chee Zuur CH 5-7).
-
 
 ###### Body condition
 
@@ -251,7 +251,6 @@ ggplot(data = bear.reprodata, aes(condition))+
 
 The distribution of body condition is fairly bi-modal, which can mostly be explained by differences in life-history. The majority of bears in poorer condition are cubs or yearlings still with their mothers. However, there are some very intriguing solitary females with poor body condition.
 
-
 ```{r}
 
 
@@ -264,8 +263,7 @@ par(op)
 
 ```
 
-We have a lot of violations here, but it might be related to reproductive status. 
-
+We have a lot of violations here, but it might be related to reproductive status.
 
 ##### Saturated Model
 
@@ -284,10 +282,90 @@ par(op)
 
 Even when we consider almost all explanetory variables and interactions, we still violate assumptions of normality
 
-
 ##### Zuur 2.2 summary
 
-We may need to transform cortisol to meet the assumptions of normality
-year may be auto-correlated
-The body condition metric violates a lot of the linear regression assumptions
-We may need to use a generalized rather than general linear regression model.
+We may need to transform cortisol to meet the assumptions of normality year may be auto-correlated The body condition metric violates a lot of the linear regression assumptions We may need to use a generalized rather than general linear regression model.
+
+### Time effects on N15 and C13
+
+During my initial data exploration, I noticed an odd patter in when I plotted N15 and C13 by year
+
+```{r}
+
+ggplot(data = bear.reprodata, aes(year,N15))+
+  geom_point(size=3, alpha=0.6)+
+  xlab("Year in which hair was grown")+
+  ylab(expression(paste(delta^{15}, "N (\u2030)")))+
+  theme(
+    axis.title = element_text(size=20, face = "bold"),
+    axis.text = element_text(size = 18),
+    axis.line = element_line(size = 1.2),
+    panel.background = element_rect(fill = "grey95")
+  )
+
+
+ggplot(data = bear.reprodata, aes(year,C13.suess))+
+  geom_point(size=3, alpha=0.6)+
+  xlab("Year in which hair was grown")+
+  ylab(expression(paste(delta^{13}, "C (\u2030)")))+
+  theme(
+    axis.title = element_text(size=20, face = "bold"),
+    axis.text = element_text(size = 18),
+    axis.line = element_line(size = 1.2),
+    panel.background = element_rect(fill = "grey95")
+  )
+  
+
+```
+
+So I need to explore and eliminate some of systematic, non-ecological explanations for this. The pattern is more extreme in Nitrogen, so I will start there
+
+```{r}
+
+ggplot(data = bear.reprodata, aes(sampleID,N15))+
+  geom_point(size=3, alpha=0.6)+
+  xlab("Sample ID")+
+  ylab(expression(paste(delta^{15}, "N (\u2030)")))+
+  theme(
+    axis.title = element_text(size=20, face = "bold"),
+    axis.text = element_text(size = 18),
+    axis.line = element_line(size = 1.2),
+    panel.background = element_rect(fill = "grey95")
+  )
+```
+
+Other than a gap around sample 100, I don't see any patterns here
+
+```{r}
+
+ggplot(data = bear.reprodata, aes(year,sampleID))+
+  geom_jitter(size=3, alpha=0.4, width = 0.25)+
+  xlab("Year in which hair was grown")+
+  ylab("Sample ID")+
+  theme(
+    axis.title = element_text(size=20, face = "bold"),
+    axis.text = element_text(size = 18),
+    axis.line = element_line(size = 1.2),
+    panel.background = element_rect(fill = "grey95")
+  )
+```
+
+As we might expect, sample ID seems to increase by year almost perfectly linearly from 1995 to 2007, then it gets a little funky. But most importantly, I do not see a pattern like the one seen in $\delta$ 15N
+
+```{r}
+
+ggplot(data = bear.reprodata, aes(year,N15))+
+  geom_jitter(size=3, alpha=0.8, width = 0.25, aes(color=Cmonth))+
+  xlab("Month in which bear was captured")+
+  ylab(expression(paste(delta^{15}, "N (\u2030)")))+
+  theme(
+    axis.title = element_text(size=20, face = "bold"),
+    axis.text = element_text(size = 18),
+    axis.line = element_line(size = 1.2),
+    panel.background = element_rect(fill = "grey95")
+  )+
+  scale_color_viridis(discrete = TRUE)
+
+```
+
+The capture month does not explain the pattern
