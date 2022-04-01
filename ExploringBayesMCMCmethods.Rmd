@@ -30,5 +30,16 @@ bear.reprodata$fYEAR <- as.factor(bear.reprodata$fYEAR)
 
 I previously determine that my data has some auto-correlation and underlying variance structures that violate the assumptions of linear regression modeling. I am now going to explore using Bayesian methods and MCMC to model my data.
 
-This .Rmd follows Chapter 23 in "Mixed Effects Models and Extensions in Ecology with R" by Zuur et al. (2009).
+The Zuur book is a bit outdated for Bayesian modeling (just the code examples of course). So rather than follow CH. 23 in Zuur et al. 2009
+This .Rmd follows the github tutorial by Drs Hartig and Dorman from APES: http://biometry.github.io/APES//LectureNotes/StatsCafe/Linear_models_jags.html
+
+```{r}
+
+
+
+
+```
+
+
+
 
