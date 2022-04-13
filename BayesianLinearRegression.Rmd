@@ -1,0 +1,48 @@
+---
+title: "Random effects"
+author: "Ashlee Mikkelsen"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+
+rm(list = ls())
+setwd("~/Rprojects/Diet-and-reproduction-in-rown-bears")
+
+library(ggplot2)
+library(dplyr)
+library(GGally)
+library(viridis)
+library(INLA)
+
+P <- palette(viridis(8))
+bear.reprodata <- read.csv("bearreprodata.csv")
+bear.reprodata$fYEAR <- as.factor(bear.reprodata$fYEAR)
+bear.reprodata$Cmonth <- as.factor(bear.reprodata$Cmonth)
+
+```
+
+
+#### Hypothesis #2: Explaining variation in cortisol
+
+This model predicts that there are detectable physiologicaø differtences between reproducing females, females newly seperated from offspring, and females who failed to reproduce
+
+```{r}
+Hyp1.data <- subset(bear.reprodata, repro!="WithMother")
+
+ Hyp1<- inla(cortisol.kitcorrected~1+repro+N15+C13.suess+condition+year+f(
+  BearID, model = "iid"
+), data = Hyp1.data
+  )
+
+summary(Hyp1)
+
+```
+
