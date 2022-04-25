@@ -165,6 +165,93 @@ ggplot(data = bear.reprodata.capture, aes(Cmonth))+
 ```
 
 
+### Reproduction covariates
+
+Now that I have my data cleaned up and I have identified the females for which we have stable isotopes and cortisol, I need to extract and summarize their reproductive status, length of meternal care, etc for analysis.
+
+First off, I load in the reproduction data table given to me by Jenny Hansen on 25 April 2022
+
+```{r}
+ReproData <- read.csv("ReproData20220425.csv")
+str(ReproData)
+
+
+# Ok. Below I pull out all the unique bear IDs in my dataset
+BearIDs <- bear.reprodata.capture %>% count(BearID)
+
+# Next I need to pull all the records for the bears in my dataset
+
+ReproID <- ReproData$objectid
+
+BID <- BearIDs$BearID
+
+d.f <- ReproData[ReproData$objectid %in% BID,]
+
+d.f %>% count(objectid)
+
+# Now I want to only include the bear years included in my data base. I concatonate bear and year to make a string that matches the bearyear.sampled in the bear.reprodata.capture table and will pull out the records that match
+
+d.f$Bear.Year <- paste0(d.f$objectid,"_",d.f$year)
+
+DF.BearYear <- d.f[d.f$Bear.Year %in% bear.reprodata.capture$bearyear.sampled,]
+
+# Somehow the records in bear.repro.capture table do not match the DF.BearYear table. There is a discrepency of 3 records
+
+Count1 <- DF.BearYear %>% count(objectid)
+Count2 <- bear.reprodata.capture %>% count(BearID)
+
+COUNT <- cbind(Count1,Count2)
+
+for (i in 1:305) {
+  if(COUNT[i,2]==COUNT[i,4]){
+    print("Good")
+  } else{
+    print(COUNT[i,1])
+  }
+}
+# Now I can see which records do not match: W0402, W0610, and W9812.All three of these are instances in which there are two records for the same bear in the same year. 
+
+
+DF.brc <- bear.reprodata.capture %>%
+  group_by(bearyear.sampled) %>%
+  summarise(
+    BearID=BearID,
+    year=year,
+    bearyear.sampled=bearyear.sampled,
+    sex=sex,
+    birth=birth,
+    age=age,
+    repro=repro,
+    mN15=mean(N15),
+    mC13=mean(C13.suess),
+    mass=mass,
+    headcirc=headcirc,
+    capturedate=capturedate,
+    cortisol.kitcorrected=mean(cortisol.kitcorrected),
+    condition=condition,
+    fYEAR=fYEAR,
+    fAGE=fAGE
+  )
+# Now I have taken the mean stable isotope value and cortisol value for those three records, but now there are duplicates. So I need to delete one of the duplicates.
+
+DF.brc2 <- DF.brc[-c(127,203,524),]
+
+# Now I should be able to combine the data from the repro table and the bear data table
+
+names(DF.brc2)[names(DF.brc2)=="bearyear.sampled"] <- "Bear.Year"
+
+BRC <- merge(DF.brc2, DF.BearYear, by="Bear.Year")
+
+
+
+```
+
+
+
+
+
+
+
 Finally, we save our datafile
 
 ```{r}
