@@ -146,8 +146,6 @@ bear.reprodata <- bears.repro %>%
     bearyear=bearyear.represent,
     mass=weight
   )
-
-
 ```
 
 
@@ -188,9 +186,15 @@ BID <- BearIDs$BearID
 d.f <- ReproData[ReproData$objectid %in% BID,]
 
 d.f %>% count(objectid)
+```
 
-# Now I want to only include the bear years included in my data base. I concatonate bear and year to make a string that matches the bearyear.sampled in the bear.reprodata.capture table and will pull out the records that match
 
+Now I want to only include the bear years included in my data base. Then I concentrate bear and year to make a string that matches the bearyear.sampled in the bear.reprodata.capture table and will pull out the records that match.
+
+It is important to remember that bears are captured when their cubs are yearlings. So using Öda as an example, she was captured in 2000,2002,2004,2006,and 2008. In each of these instances she had cubs that were 1 year old, meaning that the stable isotopes and cortisol values represent the year when her cubs were cubs of the year. 
+
+
+```{r}
 d.f$Bear.Year <- paste0(d.f$objectid,"_",d.f$year)
 
 DF.BearYear <- d.f[d.f$Bear.Year %in% bear.reprodata.capture$bearyear.sampled,]
@@ -239,16 +243,39 @@ DF.brc2 <- DF.brc[-c(127,203,524),]
 # Now I should be able to combine the data from the repro table and the bear data table
 
 names(DF.brc2)[names(DF.brc2)=="bearyear.sampled"] <- "Bear.Year"
+names(DF.brc2)[names(DF.brc2)=="year"] <- "Year.rep"
 
 BRC <- merge(DF.brc2, DF.BearYear, by="Bear.Year")
-
-
-
 ```
 
 
 
 
+Now my data frame has several columns with duplicate infor and confusing names, so I will subset it to minimize redundancy and then rename the columns to make them more interpretable.
+
+```{r}
+
+BRC.reduced <- subset(BRC, select=-c(sex.y,Nr,objectid,comment,ACT,Temp,HR,OBS,Milk,Tracks,X,X.1))
+
+
+BRC.rename <- BRC.reduced %>%
+  rename(
+    bear.year=Bear.Year,
+    bearID=BearID,
+    year.rep=Year.rep,
+    sex=sex.x,
+    birth.year=birth,
+    dN15=mN15,
+    dC13=mC13,
+    fREPRO=FiNAl_reproduction_status_winter.spring,
+    number.cubs=numberofcubsfirstcount,
+    cub.age=cubage,
+    capture.date=capturedate,
+    pub.name=pubname
+  )
+
+
+```
 
 
 
@@ -256,7 +283,8 @@ Finally, we save our datafile
 
 ```{r}
 
-write.csv(bear.reprodata.capture,"bearreprodata.csv")
+write.csv(BRC.rename,"bearreprodata.csv")
+
 ```
 
 
