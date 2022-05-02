@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 This Rmarkdownd will go through data prep for analysis of the physiological indicators of reproduction in brown bears (*Ursus arctos arctos*) in Sweden
 
-```{r load packages, include=FALSE}
+```{r, include=FALSE}
 # clear workspace and load packages
 rm(list = ls())
 setwd("~/Rprojects/Diet-and-reproduction-in-rown-bears")
@@ -285,6 +285,46 @@ Finally, we save our datafile
 
 write.csv(BRC.rename,"bearreprodata.csv")
 
+rm(list = setdiff(ls(), "BRC.rename"))
+
+library(dplyr)
+
 ```
 
+
+I need to make a family group covariate, but because of the way this data is formatted, it's very frustrating
+
+
+```{r}
+
+
+#OK. So at this point i need to loop through the offspring and if they have the same mom as MBY [i,1] and same year as MBY [i,2], they get the family group of MBY [i,3]. I also need a loop to loop through all of the records in Offspring
+
+Mams <- vector()
+ReproEvents <- vector()
+for (i in 1:557) {
+  if(BRC.rename[i,7]=="WithCubs"){
+    Mams[i]=BRC.rename[i,36]
+  }else{Mams[i]=0}
+}
+
+for (i in 1:557) {
+  if(BRC.rename[i,7]=="WithCubs"){
+    ReproEvents[i]=BRC.rename[i,3]
+  }
+}
+
+Reproduction <- as.data.frame(cbind(Mams,ReproEvents))
+Reproduction.unique <- unique(Reproduction)
+Reproduction.u.Nans <- subset(Reproduction.unique,Mams!="NA")
+Reproduction.u.Nans.unknows <- subset(Reproduction.u.Nans,Mams!="unknown")
+
+Clean.ReproductionEvents <- Reproduction.u.Nans.unknows
+
+
+
+
+
+
+```
 
