@@ -21,24 +21,167 @@ library(dplyr)
 library(GGally)
 library(viridis)
 library(INLA)
+library(brinla)
 
 P <- palette(viridis(8))
-bear.reprodata <- read.csv("bearreprodata.csv")
+bear.reprodata <- read.csv("ReproData_20220503.csv")
 bear.reprodata$fYEAR <- as.factor(bear.reprodata$fYEAR)
 bear.reprodata$Cmonth <- as.factor(bear.reprodata$Cmonth)
+str(bear.reprodata)
 
 ```
 
 
-#### Hypothesis #2: Explaining variation in cortisol
+## Hypothesis #1: Explaining variation in length of maternal care
 
-This model predicts that there are detectable physiologicaø differtences between reproducing females, females newly seperated from offspring, and females who failed to reproduce
+Maternal care = b0+ (b1 x cortisol)+(b2 x d15N)+(b3 x body condition)+(b4 x litter size) + (b5 x offspring condition) | BearID + family group
+
+I move through this analysis following Zuur et al. 2013.
+
+### Data exploration
+
+#### categorical variables
+```{r}
+#Number of observations per maternal care
+table(bear.reprodata$length.mat.care)
+# 48 had cubs die, 12 females died causing unnatural seperation, 98 need to be removed because they refer to years when there was no reproduction, 254 cared for litters for 1.5 years and 123 cared for litters for 2.5 years.
+
+hyp1.dat <- bear.reprodata[which(bear.reprodata$length.mat.care!="n"),]
+hyp1.dat <- hyp1.dat[which(hyp1.dat$length.mat.care!="cd"),]
+hyp1.dat <- hyp1.dat[which(hyp1.dat$length.mat.care!="d"),]
+
+# Number of observations per litter size
+table(hyp1.dat$litter.size)
+
+# There is one record in which there was an unknown litter size (0), 46 singles, 184 twins, 137 triplets, and 9 quadruplets. The small quadruplet size is likely to give us some issues and may need to be combined with triplets, but we will leave them separate first.
+
+hyp1.dat <- hyp1.dat[which(hyp1.dat$litter.size>0),]
+
+```
+
+#### Continuous variables
 
 ```{r}
-Hyp1.data <- subset(bear.reprodata, repro!="WithMother")
+hyp1.dat <- subset(hyp1.dat, repro=="WithCubs")
+#Oof. That really knocked down the sample size
 
- Hyp1<- inla(cortisol.kitcorrected~1+repro+N15+C13.suess+condition+year+f(
-  BearID, model = "iid"
+# length of maternal care (cont)
+dotchart(hyp1.dat$n.LMC)
+
+# Cortisol
+dotchart(hyp1.dat$cortisol.kitcorrected)
+# We have 1 outlier with greater than 25. We leave it for now but need to be mindful of it
+
+# d15N
+dotchart(hyp1.dat$dN15)
+
+#body condition
+dotchart(hyp1.dat$condition)
+# We have a bit of an extreme bi-modal distribution because this dataset includes females and offspring. I want to just focus on the females. *Unless cubs are part of the family seperation?*
+
+# offspring condition
+dotchart(hyp1.dat$mean.offspring.condition)
+
+####### Any linear relationship?
+ggplot(data = hyp1.dat,aes(condition, mean.offspring.condition))+
+  geom_point()+
+  geom_smooth()+
+  theme_classic()
+# unsurprisingly, we have a linear relationship between these two.
+lmCondition <- lm(mean.offspring.condition~condition, data = hyp1.dat)
+summary(lmCondition)
+#r squared = 0.46. Not great, but not the end of the world.
+
+ggplot(data = hyp1.dat, aes(condition, cortisol.kitcorrected))+
+  geom_point()+
+  theme_classic()+
+  geom_smooth()
+# we have another linear relationship
+lmcort.cond <- lm(condition~cortisol.kitcorrected, data = hyp1.dat)
+summary(lmcort.cond)
+# r squared = 0.18. very interesting but fine t run togther in same model
+
+ggplot(data = hyp1.dat, aes(dN15, mean.offspring.condition))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  theme_classic()
+# very slight linear relationship. Man, we have a lot of correlated variables.
+lmN15.offspring <- lm(mean.offspring.condition~dN15, data = hyp1.dat)
+summary(lmN15.offspring)
+# It is nothing!
+
+############ End of data exploration
+
+```
+
+
+### Linear models
+
+Giving up on this hypothesis for now. It needs more thought given the data
+#```{r}
+
+
+
+hyp1.priors.det <- lm(n.LMC~1, data = hyp1.dat)
+summary(hyp1.priors.det)
+U1 <- 3*sd(hyp1.dat$n.LMC)
+
+priorpc1 <- list(prior="pc.prec", param=c(U1, 0.01))
+
+hyp1a.model <- inla(cortisol.kitcorrected~length.mat.care+
+                     f(bearID,model = "iid"),
+                   data = hyp1.dat,
+                   control.compute = list(dic=TRUE, waic=TRUE),
+                   control.predictor = list(compute=TRUE),
+                   quantiles = c(0.025,0.975)
+                  )
+summary(hyp1a.model)
+
+
+hyp1b.model <- inla(dN15~length.mat.care+
+                     f(bearID,model = "iid"),
+                   data = hyp1.dat,
+                   control.compute = list(dic=TRUE, waic=TRUE),
+                   control.predictor = list(compute=TRUE),
+                   quantiles = c(0.025,0.975)
+                  )
+summary(hyp1a.model)
+
+
+  
+#```
+
+
+
+
+## Hypothesis #2: Explaining variation in cortisol
+
+This model predicts that there are detectable physiological differences between reproducing females, females newly separated from offspring, and females who failed to reproduce
+
+cortisol=b0+(b1xrepro)+(b2xd15N)+(b3xcondition)|year+bearID
+
+### Data Exploration
+
+#### categorical variables
+
+```{r}
+hyp2.dat <- subset(bear.reprodata, repro!="WithMother")
+
+# reproductive status
+table(hyp2.dat$repro)
+# 146 females with cubs versus 139 solitary females
+
+dotchart(hyp2.dat$cortisol.kitcorrected)
+# There are 3 outliers that I need to be aware of 
+
+
+```
+
+
+```{r}
+
+ Hyp1<- inla(cortisol.kitcorrected~1+repro+dN15+dC13+condition+year+f(
+  bearID, model = "iid"
 ), data = Hyp1.data
   )
 
