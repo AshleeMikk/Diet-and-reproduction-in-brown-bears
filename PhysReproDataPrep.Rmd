@@ -20,7 +20,6 @@ library(readxl)
 library(dplyr)
 library(ggplot2)
 library(viridis)
-library(tidyverse)
 
 ```
 
@@ -39,8 +38,10 @@ warnings()
 
 So I have my raw data loaded and it needs a lot of work to be usable for analysis. I need to correct the cortisol for the difference between extraction kits. I need to correct the 13C for the Suess effect, I need to extract the females from this files and I need to determine how many NAs are present and what to do with them. Do I remove them or do I populate their missing data?
 
-### Data Cleanup
+## Data Cleanup
 I need remove quantify the records with missing values. 149 females do not have cortisol values and of these, 35 are missing stable isotope data. For now, let's remove these.
+
+### Remove records missing cortisol and stable isotope data
 ```{r remove NAs}
 
 bears.fem <- subset(rawdata, reprostatus.represent!="SolitaryM")
@@ -50,7 +51,7 @@ bears.fem.cort.si <- subset(bears.fem.cort, N15!="NA")
 
 ```
 
-
+### Cortisol Kit Correction
 I guess the first step will be correcting the cortisol. This means that I need to use the equation published in Wilson et al. 2021. While this analysis focuses on females, it also includes cubs-yearlings, which include males. Therefore the general cortisol correction is ideal
 
 $$
@@ -92,6 +93,7 @@ bears.fem.cort.si$cortisol.kitcorrected <- df$cort.corrected
 
 ```
 
+### Suess correction
 The next step is to correct the 𝛅13C values for the Suess effect due to human burning of fossil fuels. Following Chamerlain *et al.* 2005, I use a time-dependent correction of -0.022‰ for each year up to the last year in my data set.
 
 $$
@@ -110,7 +112,7 @@ bears.fem.cort.si$C13.suess <- C13.suess
 
 ```
 
-
+### Body condition
 It looks like there are a few more housekeeping issues to address. A common metric of body condition is mass or mass scaled by a body measurement. In this case, we have mass and head circumference. I will create a body condition metric based on these two measurements
 
 ```{r}
@@ -123,6 +125,7 @@ bears.repro$condition <- bears.repro$weight/bears.repro$headcirc
 # Bears will have a higher body condition index as the ratio between head circumference, which is a good measure of the overall skeletal size, and their mass increases. For example, a bear with really high mass and a small head means they are a smaller bear with greater fet reserves, muscle mass, or organs. All three of these equate to plentiful resource availability
 ```
 
+### Fix data type & names
 Most of the data was stored as characters which is really annoying. There is a better way to do this, but I am just going to go through and fix most of these right now
 ```{r}
 bears.repro$fYEAR <- bears.repro$year.represent
@@ -130,9 +133,6 @@ bears.repro$year.represent <- as.numeric(bears.repro$year.represent)
 bears.repro$age <- as.numeric(bears.repro$age)
 bears.repro$fAGE <- as.factor(bears.repro$age)
 bears.repro$weight <- as.numeric(bears.repro$weight)
-
-
-
 
 ```
 
@@ -149,7 +149,7 @@ bear.reprodata <- bears.repro %>%
 ```
 
 
-
+### Retain only spring captures
 
 ```{r}
 bear.reprodata$Cmonth<-as.numeric(format(bear.reprodata$capturedate,"%m"))
@@ -163,139 +163,342 @@ ggplot(data = bear.reprodata.capture, aes(Cmonth))+
 ```
 
 
-### Reproduction covariates
+## Reproduction covariates
 
 Now that I have my data cleaned up and I have identified the females for which we have stable isotopes and cortisol, I need to extract and summarize their reproductive status, length of meternal care, etc for analysis.
 
-First off, I load in the reproduction data table given to me by Jenny Hansen on 25 April 2022
+First off, I load in the reproduction data table given to me by Joanie Van De Walle Hansen on 10 May 2022
 
 ```{r}
-ReproData <- read.csv("ReproData20220425.csv")
-str(ReproData)
-
-
-# Ok. Below I pull out all the unique bear IDs in my dataset
-BearIDs <- bear.reprodata.capture %>% count(BearID)
-
-# Next I need to pull all the records for the bears in my dataset
-
-ReproID <- ReproData$objectid
-
-BID <- BearIDs$BearID
-
-d.f <- ReproData[ReproData$objectid %in% BID,]
-
-d.f %>% count(objectid)
+write.csv(bear.reprodata.capture,"beardata_20220509.csv")
+rm(list =ls())
 ```
 
 
-Now I want to only include the bear years included in my data base. Then I concentrate bear and year to make a string that matches the bearyear.sampled in the bear.reprodata.capture table and will pull out the records that match.
-
-It is important to remember that bears are captured when their cubs are yearlings. So using Öda as an example, she was captured in 2000,2002,2004,2006,and 2008. In each of these instances she had cubs that were 1 year old, meaning that the stable isotopes and cortisol values represent the year when her cubs were cubs of the year. 
 
 
 ```{r}
-d.f$Bear.Year <- paste0(d.f$objectid,"_",d.f$year)
+reproAF <- read.table("reproduction_table20191008.txt",
+                      header=T)
 
-DF.BearYear <- d.f[d.f$Bear.Year %in% bear.reprodata.capture$bearyear.sampled,]
+# Keep only females
+females <- subset(reproAF, reproAF$sex=="f")
 
-# Somehow the records in bear.repro.capture table do not match the DF.BearYear table. There is a discrepency of 3 records
+# Keep only the columns of interest
+names(females)
 
-Count1 <- DF.BearYear %>% count(objectid)
-Count2 <- bear.reprodata.capture %>% count(BearID)
+#_________________________________________________________________________________________________________
+# What to remove: sex, pubname, periodwcubs, mother and father. Mother and father identity would be useful
+# but this is not the final pedigree, so it may not be right.
+#_________________________________________________________________________________________________________
 
-COUNT <- cbind(Count1,Count2)
-
-for (i in 1:305) {
-  if(COUNT[i,2]==COUNT[i,4]){
-    print("Good")
-  } else{
-    print(COUNT[i,1])
-  }
-}
-# Now I can see which records do not match: W0402, W0610, and W9812.All three of these are instances in which there are two records for the same bear in the same year. 
+repro <- females[,-c(1,2,6,20,23:31)] # CAREFUL HERE! MAKE SURE THE COLUMN NUMBERS ARE THE RIGHT ONES - MAY CHANGE
+head(repro)
 
 
-DF.brc <- bear.reprodata.capture %>%
-  group_by(bearyear.sampled) %>%
-  summarise(
-    BearID=BearID,
-    year=year,
-    bearyear.sampled=bearyear.sampled,
-    sex=sex,
-    birth=birth,
-    age=age,
-    repro=repro,
-    mN15=mean(N15),
-    mC13=mean(C13.suess),
-    mass=mass,
-    headcirc=headcirc,
-    capturedate=capturedate,
-    cortisol.kitcorrected=mean(cortisol.kitcorrected),
-    condition=condition,
-    fYEAR=fYEAR,
-    fAGE=fAGE
+```
+
+
+### treatment of mixed-age litters
+Over the years, there have been 2 cases of mixed-age litters. W8904 in 1995 and W9307 in 2000. I will keep those litters, but consider them as 2.5 and not consider the new cub in survival analysis
+
+```{r}
+mixed <- c("W8904", "W9307") # verifier litter id W9307
+
+repro$Jan <- replace(repro$Jan, repro$objectid == mixed[1] & repro$year == 1995, "s")
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == mixed[1] & repro$year == 1994, "no")
+repro$cubage <- replace(repro$cubage, repro$objectid == mixed[1] & repro$year == 1995, 2) # change cub age for the yearling that stayed with the female in the mixed-age litter
+
+repro$Jan <- replace(repro$Jan, repro$objectid == mixed[2] & repro$year == 2000, "s") # verify LitterId
+repro$cubage <- replace(repro$cubage, repro$objectid == mixed[2] & repro$year == 2000, 1) # change cub age for the yearling that stayed with the female in the mixed-age litter
+```
+
+
+### treatment of number of cubs in January and "c" code
+
+
+```{r}
+table(repro$Jan)
+repro$Jan <- replace(repro$Jan, repro$Jan == 3, "s") # because I know for W8906 (the only case) 
+repro$Jan <- replace(repro$Jan, repro$Jan == "c", "m") # because I know for W8906 (the only case) 
+table(repro$Jan) # should be b,l,m,s
+```
+
+
+### Treatment of errors in the cubseparation column.
+
+```{r}
+
+table(repro$cubseparation)
+
+# Also, some cubseparations should have been "yes", but are marked as NAs
+is.na(repro$cubseparation)
+
+reproposs <- c("b", "s")
+nas <- repro[which(is.na(repro$cubseparation)),]
+problemid <- subset(nas, nas$Jan %in% reproposs)
+print(problemid[,c(1,2)])
+
+
+#objectid year
+
+#50     W1304 2018 should be yes
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W1304" & repro$year == 2018, "yes") 
+#118    W1508 2017 should be unknown
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W1508" & repro$year == 2017, "unknown") 
+#1296    W1418 2017 should be no
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W1418" & repro$year == 2017, "no") 
+#1296    W1410 2017 should be unknwon
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W1410" & repro$year == 2017, "unknown") 
+#1261    W1407 2017 should be unknown
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W1407" & repro$year == 2017, "unknown") 
+#1208    W1311 2017 should be no
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W1311" & repro$year == 2017, "no") 
+#134     W1310 2017 should be no
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W1310" & repro$year == 2017, "no") 
+#1119    W1203 2017 should be no
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W1203" & repro$year == 2017, "no") 
+#129     W0104 2017 should be no
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W0104" & repro$year == 2017, "no") 
+#1172    W1304 2016 should be yes
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W1304" & repro$year == 2016, "yes") 
+#1139    W1206 2016 should be yes
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W1206" & repro$year == 2016, "yes") 
+#1093    W1110 2016 should be yes
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W1110" & repro$year == 2016, "yes")
+#888     W0818 2016 should be yes
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W0818" & repro$year == 2016, "yes") 
+#260     W0219 2016 should be yes
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W0219" & repro$year == 2016, "yes") 
+#1294    W1418 2015 should be yes
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W1418" & repro$year == 2015, "yes") 
+#1138    W1206 2015 should be yes
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W1206" & repro$year == 2015, "yes") 
+#2139    W9814 2014 should be yes
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W9814" & repro$year == 2014, "yes") 
+#236     W0217 2008 should be yes
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W0217" & repro$year == 2008, "yes") 
+#142     W0107 2008 should be yes
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W0107" & repro$year == 2008, "yes") 
+#280     W0227 2003 should be unknown
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W0227" & repro$year == 2003, "unknown") 
+#1794    W9306 1999 should be unknown
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W9306" & repro$year == 1999, "unknown") 
+
+#687     W0621 2016 should be no
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W0621" & repro$year == 2016, "no") 
+#1899    W9403 2016 should be no
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W9403" & repro$year == 2016, "no") 
+
+#    W0605 2019 should be no
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W0605" & repro$year == 2019, "no") 
+#    W0623 2019 should be unknown
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W0623" & repro$year == 2019, "unknown") 
+#    W0706 2019 should be unknown
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W0706" & repro$year == 2019, "unknown") 
+#    W1203 2019 should be no
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W1203" & repro$year == 2019, "no") 
+#    W1304 2019 should be no
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W1304" & repro$year == 2019, "no") 
+#    W1310 2019 should be unknown
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W1310" & repro$year == 2019, "unknown") 
+#    W1311 2019 should be unknown
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W1311" & repro$year == 2019, "unknown") 
+#    W1417 2019 should be unknown
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W1417" & repro$year == 2019, "unknown") 
+#    W1418 2019 should be no
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W1418" & repro$year == 2019, "no") 
+#    W1505 2019 should be no
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W1505" & repro$year == 2019, "no") 
+#    W1512 2019 should be yes
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W1512" & repro$year == 2019, "yes") 
+#    W9903 2019 should be unknown
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W9903" & repro$year == 2019, "unknown") 
+#    W0104 2018 should be no
+repro$cubseparation <- replace(repro$cubseparation, repro$objectid == "W0104" & repro$year == 2018, "no") 
+
+
+nas <- repro[which(is.na(repro$cubseparation)),]
+problemid <- subset(nas, nas$Jan %in% reproposs)
+print(problemid[,c(1,2)])
+# Looking good
+
+```
+
+
+### Add female Age
+
+```{r}
+
+age <- read.table("Age_determination_2017_07_09.txt", header=T, na.strings="NA", stringsAsFactors=T)
+head(age)
+
+#Keep only what is important
+age2 <- age[,c(1,3)]
+
+head(age2)
+names(age2)[1] <- "objectid"
+head(age2)
+
+# join birthdates
+repro2<-plyr::join(repro, age2, by = "objectid", type="left", match="first")
+head(repro2)
+
+
+
+# create an age column
+repro2$age <- repro2$year - repro2$birth
+head(repro2)
+str(repro2)
+
+```
+
+
+### Add female mass
+
+```{r}
+
+# Get data on weight and size
+measure <- read.table("Measure2.txt",
+                      header=T, 
+                      na.strings = "NA")#,
+                     # colClasses=c("numeric", rep("character",2), "numeric", rep("character",2), rep("numeric", 38), rep("character",2), rep("numeric", 8))) # I have removed the 4 last columns because it caused problems for importation
+head(measure)
+str(measure)
+
+measure2 <- measure[,c("BearID", "X_Year", "DateMeasure", "HeadCirc", "LifeWeight")]
+names(measure2) <- c("objectid", "year_1", "date", "headcirc", "mass")
+head(measure2)
+
+```
+
+
+
+#### Keep only spring measurements
+```{r}
+
+str(measure2)
+measure2$date <- as.Date(measure2$date, format="%Y-%m-%d")
+measure3 <- subset(measure2, format.Date(date, "%m") < "07")
+head(measure3)
+
+measure3$year <- substr(measure3$date, start=1, stop=4) # use this year instead because NAS are put under the formally year column for I don't know why
+head(measure3)
+measure3 <- measure3[-c(2)]
+
+```
+
+
+#### Merge with repro data
+
+```{r}
+repro3 <- merge(repro2, measure3, by=c("objectid", "year"), all.x=T)
+
+```
+
+
+### Add row for bear year
+```{r}
+
+repro3$bearyear <- paste(repro3$objectid, repro3$year, sep=".")
+head(repro3)
+
+```
+
+### Change format
+
+```{r}
+
+str(repro3$cubage)
+table(repro3$cubage)
+repro3$cubage <- as.numeric(as.character(repro3$cubage))
+
+repro3$numberofcubsfirstcount  <- as.numeric(as.character(repro3$numberofcubsfirstcount ))
+str(repro3)
+
+
+# show what it looks like
+repro3[1:30,]
+
+```
+
+
+
+### Add reprodusctive status
+
+```{r}
+# change the long name of third column
+names(repro3)[3] <- paste("ReproFinal")
+names(repro3)[16] <- paste("CubsFirstCount")
+head(repro3)
+summary(repro3)
+repro3[c(1:50),]
+
+```
+
+
+
+### Change <NA> by something else in the monthly columns
+
+```{r}
+
+repro3$Jan <- as.character(repro3$Jan)
+repro3$Feb <- as.character(repro3$Jan)
+repro3$Mar <- as.character(repro3$Jan)
+repro3$May <- as.character(repro3$Jan)
+repro3$Jun <- as.character(repro3$Jan)
+repro3$Jul <- as.character(repro3$Jan)
+repro3$Aug <- as.character(repro3$Jan)
+repro3$Sep <- as.character(repro3$Jan)
+repro3$Oct <- as.character(repro3$Jan)
+repro3$Nov <- as.character(repro3$Jan)
+repro3$Dec <- as.character(repro3$Jan)
+months <- names(repro3[4:15])
+repro3[months][is.na(repro3[months])] <- "unknown"
+head(repro3)
+
+
+repro3[is.na(repro3$cubseparation),"cubseparation"] <- "unknown"
+repro3[is.na(repro3$cubage),"cubage"] <- "unknown"
+table(repro3$cubage)
+
+
+
+```
+
+
+
+### Create  primiparity variable
+
+#### Create dummy variable
+Create column (nbstatus) with age and status combined 
+in a numeric format (it is easier to determine first reproduction this way)
+
+```{r}
+
+repro3$nbstatus <- ifelse(
+  repro3$Jan== "m", repro3$age+20,
+  ifelse(
+    repro3$Jan=="l", repro3$age+30,
+    ifelse(
+      repro3$Jan=="b", repro3$age+0,
+      ifelse(
+        repro3$Jan=="s", repro3$age+100,
+        ifelse(
+          repro3$Jan=="unknown", repro3$age+1000,
+          repro3$Jan
+        )
+      )
+    )
   )
-# Now I have taken the mean stable isotope value and cortisol value for those three records, but now there are duplicates. So I need to delete one of the duplicates.
+)
 
-DF.brc2 <- DF.brc[-c(127,203,524),]
-
-# Now I should be able to combine the data from the repro table and the bear data table
-
-names(DF.brc2)[names(DF.brc2)=="bearyear.sampled"] <- "Bear.Year"
-names(DF.brc2)[names(DF.brc2)=="year"] <- "Year.rep"
-
-BRC <- merge(DF.brc2, DF.BearYear, by="Bear.Year")
-```
-
-
-
-
-Now my data frame has several columns with duplicate infor and confusing names, so I will subset it to minimize redundancy and then rename the columns to make them more interpretable.
-
-```{r}
-
-BRC.reduced <- subset(BRC, select=-c(sex.y,Nr,objectid,comment,ACT,Temp,HR,OBS,Milk,Tracks,X,X.1))
-
-
-BRC.rename <- BRC.reduced %>%
-  rename(
-    bear.year=Bear.Year,
-    bearID=BearID,
-    year.rep=Year.rep,
-    sex=sex.x,
-    birth.year=birth,
-    dN15=mN15,
-    dC13=mC13,
-    fREPRO=FiNAl_reproduction_status_winter.spring,
-    number.cubs=numberofcubsfirstcount,
-    cub.age=cubage,
-    capture.date=capturedate,
-    pub.name=pubname
-  )
+head(repro3)
+str(repro3$Jan)
+table(repro3$Jan)
+summary(repro3$Jan)
+repro3$nbstatus <- as.numeric(as.character(repro3$nbstatus))
 
 
 ```
-
-
-
-Finally, we save our datafile
-
-```{r}
-
-write.csv(BRC.rename,"bearreprodata.csv")
-
-rm(list = setdiff(ls(), "BRC.rename"))
-
-library(dplyr)
-
-```
-
-
-I need to make a family group covariate, but because of the way this data is formatted, it's very frustrating.
-
-I ended up just going into excel and doing this manually.Each year a female reproduced received an individual Family Group Number (FG). Then I gave that number to all cubs born to Female f in Year y.
-
-The final file is titled ReproData_FamilyGrouped.csv
-
 
