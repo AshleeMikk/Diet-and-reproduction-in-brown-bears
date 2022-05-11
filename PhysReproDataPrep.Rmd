@@ -438,7 +438,7 @@ repro3[c(1:50),]
 
 
 
-### Change <NA> by something else in the monthly columns
+### Change <NA> to something else in the monthly columns
 
 ```{r}
 
@@ -501,4 +501,393 @@ repro3$nbstatus <- as.numeric(as.character(repro3$nbstatus))
 
 
 ```
+
+
+
+#### Add minimum age
+
+```{r}
+
+library(plyr)
+
+repro4 <- ddply(repro3, "objectid", transform, minage = min(age))
+names(repro4)
+str(repro4)
+repro4[c(1:30),c(1,2,4,20,25:27)]
+
+```
+
+
+
+#### Females followed from 0-4
+
+```{r}
+
+followed <- subset(repro4, repro4$minage < 4)
+minbirthfollowed <- ddply(followed, "objectid", transform, minbirth = min(nbstatus))
+minbirthfollowed$nbstatus <- as.numeric(as.character(minbirthfollowed$nbstatus))
+head(minbirthfollowed)
+
+#__________________________________________
+#create a dummy column to replace unknows with the status from the previous year
+#__________________________________________
+minbirthfollowed$dummy <- c("unknown", as.character(minbirthfollowed$Jan[-length(minbirthfollowed$Jan)]))
+
+head(minbirthfollowed)
+
+#__________________________________________
+#create a dummy column for previous objectid
+#__________________________________________
+
+minbirthfollowed$dummyid <- c("unknown", as.character(minbirthfollowed$objectid[-length(minbirthfollowed$Jan)]))
+
+
+#____________________
+# Attribute status: Create a loop that looks at the dummy variables and assigns a N for NA, P for primiparity, and M for multiparity
+#____________________
+
+for(i in 1:length(minbirthfollowed$objectid)){
+  if(minbirthfollowed$Jan[i] == "b" & minbirthfollowed$age[i]== minbirthfollowed$minbirth[i]){
+    minbirthfollowed$statut[i] <- "P"
+  }
+  if(minbirthfollowed$Jan[i] == "m"){
+    minbirthfollowed$statut[i] <- "N"
+  }
+  if(minbirthfollowed$Jan[i] == "l"){
+    minbirthfollowed$statut[i] <- "N"
+  }
+  if(minbirthfollowed$Jan[i] == "s"){
+    minbirthfollowed$statut[i] <- minbirthfollowed$statut[i-1]
+  }
+  if(minbirthfollowed$Jan[i] == "b" & minbirthfollowed$age[i] > minbirthfollowed$minbirth[i]){
+    minbirthfollowed$statut[i] <- "M"
+  }
+  if(minbirthfollowed$Jan[i] == "unknown" & minbirthfollowed$age[i] <= 3){
+    minbirthfollowed$statut[i] <- "N"
+  }
+  if(minbirthfollowed$Jan[i] == "unknown" & minbirthfollowed$age[i] >= 4){
+    minbirthfollowed$statut[i] <- "unknown"
+  }
+  if(minbirthfollowed$Jan[i] == "b" & minbirthfollowed$dummy[i] == "unknown"){
+    minbirthfollowed$statut[i] <- "unknown"
+  }
+  if(minbirthfollowed$Jan[i] == "b" & minbirthfollowed$dummy[i] == "unknown" & minbirthfollowed$age[i] <=4) {
+    minbirthfollowed$statut[i] <- "P"
+  }
+  if(minbirthfollowed$Jan[i] == "b" & minbirthfollowed$dummy[i] == "unknown" & minbirthfollowed$age[i] > minbirthfollowed$minbirth[i]) {
+    minbirthfollowed$statut[i] <- "M"
+  }
+}
+
+#what does it look like?
+head(minbirthfollowed)
+minbirthfollowed[70:110,c(1,2,4,20,25:31)]
+# Looks good! Take that R!
+
+
+```
+
+
+
+#### Females followed after age 4
+
+```{r}
+
+notfollowed <- subset(repro4, repro4$minage >= 4)
+minbirthnotfollowed <- ddply(notfollowed, "objectid", transform, minbirth = min(nbstatus))
+
+#__________________________________________
+#create a dummy column for previous status to replace all unknowns
+#__________________________________________
+minbirthnotfollowed$dummy <- c("unknown", as.character(minbirthnotfollowed$Jan[-length(minbirthnotfollowed$Jan)]))
+
+#__________________________________________
+#create a dummy column for previous objectid and replace it with known statuses. The first instance of birth is an unknown status, however each reproductive event after that is known to be multiparous
+#__________________________________________
+minbirthnotfollowed$dummyid <- c("unknown", as.character(minbirthnotfollowed$objectid[-length(minbirthnotfollowed$Jan)]))
+
+for(i in 1:length(minbirthnotfollowed$objectid)){
+  if(minbirthnotfollowed$Jan[i] == "m"){
+    minbirthnotfollowed$statut[i] <- "N"
+  }
+  if(minbirthnotfollowed$Jan[i] == "l"){
+    minbirthnotfollowed$statut[i] <- "N"
+  }
+  if(minbirthnotfollowed$Jan[i] == "b" & minbirthnotfollowed$age[i] <= minbirthnotfollowed$minage[i] & minbirthnotfollowed$age[i]<10){
+    minbirthnotfollowed$statut[i] <- "unknown"
+  }
+  if(minbirthnotfollowed$Jan[i] == "b" & minbirthnotfollowed$age[i] > minbirthnotfollowed$minbirth[i]){
+    minbirthnotfollowed$statut[i] <- "M"
+  }
+  if(minbirthnotfollowed$Jan[i] == "b" & minbirthnotfollowed$age[i] == minbirthnotfollowed$minbirth[i] & minbirthnotfollowed$dummy[i] == "s" & minbirthnotfollowed$dummyid[i] == minbirthnotfollowed$objectid[i]){
+    minbirthnotfollowed$statut[i] <- "M"
+  }
+  if(minbirthnotfollowed$Jan[i] == "b" & minbirthnotfollowed$dummy[i] == "s" & minbirthnotfollowed$age[i] > minbirthnotfollowed$minage[i]){
+    minbirthnotfollowed$statut[i] == "M"
+  }
+  if(minbirthnotfollowed$Jan[i] == "b" & minbirthnotfollowed$dummy[i] == "unknown"){
+    minbirthnotfollowed$statut[i] <- "unknown"
+  }
+  if(minbirthnotfollowed$Jan[i] == "b" & minbirthnotfollowed$age[i] >= 10){
+    minbirthnotfollowed$statut[i] <- "M"
+  }
+  if(minbirthnotfollowed$Jan[i] == "s"){
+    minbirthnotfollowed$statut[i] <- minbirthnotfollowed$statut[i-1]
+  }
+  if(minbirthnotfollowed$Jan[i] == "s" & minbirthnotfollowed$age[i] == minbirthnotfollowed$minage[i]){
+    minbirthnotfollowed$statut[i] <- "unknown" 
+  }
+  if(minbirthnotfollowed$Jan[i] == "unknown"){
+    minbirthnotfollowed$statut[i] <- "unknown"
+  }
+}
+
+head(minbirthnotfollowed)
+names(minbirthnotfollowed)
+minbirthnotfollowed[c(70:110),c(1,2,4,17,18,19,20,25,31)]
+# ! Looks good!
+
+```
+
+
+#### Put the two back togther
+
+```{r}
+
+
+names(minbirthfollowed); names(minbirthnotfollowed)
+
+# keep only the variables of interest
+# for minbirthfollowed 
+
+
+repro5 <- rbind(minbirthfollowed, minbirthnotfollowed) 
+
+length(repro5$objectid)
+length(repro4$objectid)
+
+unique(repro4[-which(repro4$objectid %in% unique(repro5$objectid)), "objectid"])
+
+# These records are missing age, so they were dropped from the file
+
+
+```
+
+
+#### File for age at first reproduction
+```{r}
+
+head(repro5)
+names(repro5)
+prim <- repro5[which(repro5$statut=="P"),c(1,2,20)]
+minprim <- ddply(prim, "objectid", transform, minprimiparous = min(age))
+minprim2 <- minprim[which(minprim$age == minprim$minprimiparous),]
+nrow(minprim2)
+write.table(minprim2, "AgeAtFirstReproduction_May2022.txt", row.names=F)
+
+```
+
+
+
+### Litter ID
+
+
+```{r}
+
+rm(list=setdiff(ls(), c("repro5")))
+
+for(i in 1:length(repro5$objectid)){
+  if(repro5$Jan[i] == "b"){
+    repro5$litterid[i] <- paste(repro5$objectid[i], repro5$year[i], sep=".")
+  }
+  if(repro5$Jan[i] == "s" & repro5$dummy[i] == "b" & repro5$dummyid[i] == repro5$objectid[i]){
+    repro5$litterid[i] <- repro5$litterid[i-1] 
+  }
+  if(repro5$Jan[i] == "s" & repro5$dummy[i] == "s" & repro5$dummyid[i] == repro5$objectid[i]){
+    repro5$litterid[i] <- repro5$litterid[i-1] 
+  }
+  if(repro5$Jan[i] == "l"){
+    repro5$litterid[i] <- "NA"
+  }
+  if(repro5$Jan[i] == "m"){
+    repro5$litterid[i] <- "NA"
+  }
+  if(repro5$Jan[i] == "unknown"){
+    repro5$litterid[i] <- "NA"
+  }
+}
+
+repro5[1:40,c(1,2,4,17,30:32)]
+
+unique(repro5$litterid)
+
+write.csv(repro5,"ReproIntermediate.csv")
+
+AllFems <- repro5[,c(1,2,3,4,16,17,18,19,20,22,23,24,31,32)]
+
+write.csv(AllFems, "AllFemRecords_May2022.csv")
+
+```
+
+
+### Length of Care
+
+```{r}
+
+#### keep only females that have reproduced
+repropossibilities <- c("b", "s")
+reprod <- subset(repro5, repro5$Jan %in% repropossibilities)
+names(repro5)
+summary(reprod$cubage)
+
+
+for(i in 1:length(reprod[,1])){
+  if(reprod$Jan[i] == "b"){
+    reprod$weaning[i] <- "no"
+  }
+  if(reprod$Jan[i] == "s" & reprod$cubseparation[i] == "yes"){
+    reprod$weaning[i] <- "yes"
+  }
+  if(reprod$Jan[i] == "s" & reprod$cubseparation[i] == "no"){
+    reprod$weaning[i] <- "no"
+  }
+  if(reprod$Jan[i] == "s" & reprod$cubseparation[i] == "unknown"){
+    reprod$weaning[i] <- "unknown"
+  }
+  if(reprod$Jan[i] == "s" & reprod$cubseparation[i] == "yes" & reprod$cubage[i] == "unknown"){
+    reprod$weaning[i] <- "unknown"
+  }
+}
+
+###### there should be no "NA" under cub separation for "s" and "b" -- this has to be verified manually
+reprod[is.na(reprod$Jan),] # Good
+
+# how does it look?
+reprod[1:50, c(1,2,4,17,33)]
+# good!
+
+# how many weanings?
+length(reprod[which(reprod$weaning == "yes"),1]) # 189
+
+```
+
+
+#### Weaning age
+
+```{r}
+
+# CAUTION!!!!!!!!!!!!!!!!!!!
+# There should be no NA under cub separation for cubs of known age
+# CAUTION!!!!!!!!!!!!!!!!!!
+
+# codes for cubseparation2: no = 3, yes = 7, unknown = 6, NA = 0
+# in 2 steps
+
+for(i in 1:length(reprod[,1])){
+  if(reprod$cubage[i] == "unknown"){
+    reprod$weaningage[i] <- "unknown"
+  } else {
+    if(reprod$cubage[i] == "2" & reprod$cubseparation[i] == "unknown"){
+      reprod$weaningage[i] <- "2.5"
+    } else {
+      if(reprod$cubage[i] == "2" & reprod$cubseparation[i] == "yes"){
+        reprod$weaningage[i] <- "2.5"
+      } else {
+        if(reprod$cubage[i] == "1" & reprod$cubseparation[i] == "unknown"){
+          reprod$weaningage[i] <- "unknown"
+        } else {
+          if(reprod$cubage[i] == "1" & reprod$cubseparation[i] == "yes"){
+            reprod$weaningage[i] <- "1.5"
+          } else {
+            if(reprod$cubage[i] == "0" & reprod$cubseparation[i] == "yes"){
+              reprod$weaningage[i] <- "litterloss"
+            } else {
+              if(reprod$cubage[i] == "0" & reprod$cubseparation[i] == "unknown"){
+                reprod$weaningage[i] <- "unknown"
+              } else { reprod$weaningage[i] <- "Tochange"}
+            }
+          }}}}}}
+
+
+
+# 2nd step
+# column for litterid post
+#__________________________________________
+#create a dummy column for following year
+#__________________________________________
+
+reprod$dummypostlitterid <- c(as.character(reprod$litterid[-1]), "unknown")
+
+reprod$weaningage <- replace(reprod$weaningage, reprod$cubage == "1" & reprod$cubseparation == "no", "2.5") 
+
+for(i in 1:length(reprod[,1])){
+  if(reprod$weaningage[i] == "Tochange" & reprod$cubage[i] == "1" & reprod$litterid[i] == reprod$dummypostlitterid[i]){
+    reprod$weaningage[i] <- reprod$weaningage[i+1] 
+  } else {
+    reprod$weaningage <- reprod$weaningage
+  }
+}
+
+for(i in 1:length(reprod[,1])){
+  if(reprod$weaningage[i] == "Tochange" & reprod$cubage[i] == "0" & reprod$litterid[i] == reprod$dummypostlitterid[i]){
+    reprod$weaningage[i] <- reprod$weaningage[i+1] 
+  } else {
+    reprod$weaningage <- reprod$weaningage
+  }
+}
+
+for(i in 1:length(reprod[,1])){
+  if(reprod$weaningage[i] == "Tochange" & reprod$cubage[i] == "0" & reprod$litterid[i] != reprod$dummypostlitterid[i]){
+    reprod$weaningage[i] <- "unknown" 
+  } else {
+    reprod$weaningage <- reprod$weaningage
+  }
+}
+
+# let's see what it looks like:
+reprod[1:50, c(1,2,4,17,18,29,30,31,32,33,34)]
+# looks good!
+
+
+litters <- unique(reprod$litterid)
+a<-length(litters)
+weaning2 <- c()
+
+for (i in 1:a) {
+  temp<-subset(reprod, litterid==litters[i])
+  if (dim(temp)[1] > 1) {
+    weaning2.temp<-temp[dim(temp)[1],]
+  }
+  else {
+    weaning2.temp<-temp
+  }
+  weaning2<-rbind(weaning2, weaning2.temp)
+}
+
+WeaningEvents <- weaning2[,c(1,2,3,4,16,17,18,19,21,22,23,26,27,31,32,34)]
+
+write.csv(WeaningEvents,"WeaningEvents_May2022.csv", row.names=F)
+
+```
+
+
+### Add length of care
+ add the length of maternal care to the all fem table via the common litter ID
+```{r}
+
+```
+
+
+
+### Inter Litter Interval
+
+For each bearID, I can use statut to count the number of N's between reproductive events
+
+```{r}
+
+
+
+
+```
+
 
