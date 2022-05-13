@@ -875,6 +875,9 @@ write.csv(WeaningEvents,"WeaningEvents_May2022.csv", row.names=F)
  add the length of maternal care to the all fem table via the common litter ID
 ```{r}
 
+MaternalCare <- WeaningEvents[,c(15,16)]
+repro6 <- merge(AllFems,MaternalCare)
+
 ```
 
 
@@ -885,8 +888,33 @@ For each bearID, I can use statut to count the number of N's between reproductiv
 
 ```{r}
 
+repro7 <- repro6[order(repro6$objectid,repro6$year),]
+repro7$IntLitInt <- 0
 
 
+
+
+repro7$IntLitInt[cumsum(rle(repro7$Jan)$lengths)] <- 
+  rle(repro7$Jan)$lengths
+repro7$IntLitInt <- dplyr::lag(repro7$IntLitInt)
+repro7$IntLitInt[repro7$Jan!="b" & repro7$Jan!="s"] <- NA
+repro7$IntLitInt[repro7$statut=="P"] <- 0
+
+repro7[30:80,c(1,2,3,5,14,15,16)]
+# Because of the weird annual cycle of bears, this ILI isn't quite right. There should be an addition year. So I need to add 1 to all the ILIs then fix the primiparous events to 0
+repro7$dummy.ILI <- as.numeric(repro7$IntLitInt)
+repro7$IntLitInt <- repro7$dummy.ILI+1
+
+repro7[30:80,c(1,2,3,5,14,15,16)]
+
+for (i in 1:length(repro7$IntLitInt)) {
+  if(repro7$statut[i]=="P"){
+    repro7$IntLitInt[i]=0
+  }
+}
+
+
+repro7[30:80,c(1,2,3,5,14,15,16)]
 
 ```
 
