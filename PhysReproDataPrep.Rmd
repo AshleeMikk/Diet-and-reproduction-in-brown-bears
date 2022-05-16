@@ -884,38 +884,52 @@ repro6 <- merge(AllFems,MaternalCare)
 
 ### Inter Litter Interval
 
-For each bearID, I can use statut to count the number of N's between reproductive events
+Let's start with words:
+
+For each bear (objectID), I need R to count the number of rows between each instance of Jan$b. So if the table is sorted by objectid, then by year, I can create a dummy variable of only b's and POSIBALLY get R to do this. 
 
 ```{r}
 
 repro7 <- repro6[order(repro6$objectid,repro6$year),]
-repro7$IntLitInt <- 0
+repro7$dumILI <- 0
 
+write.csv(repro7, "ReproIntermediate2.csv")
 
-
-
-repro7$IntLitInt[cumsum(rle(repro7$Jan)$lengths)] <- 
-  rle(repro7$Jan)$lengths
-repro7$IntLitInt <- dplyr::lag(repro7$IntLitInt)
-repro7$IntLitInt[repro7$Jan!="b" & repro7$Jan!="s"] <- NA
-repro7$IntLitInt[repro7$statut=="P"] <- 0
-
-repro7[30:80,c(1,2,3,5,14,15,16)]
-# Because of the weird annual cycle of bears, this ILI isn't quite right. There should be an addition year. So I need to add 1 to all the ILIs then fix the primiparous events to 0
-repro7$dummy.ILI <- as.numeric(repro7$IntLitInt)
-repro7$IntLitInt <- repro7$dummy.ILI+1
-
-repro7[30:80,c(1,2,3,5,14,15,16)]
-
-for (i in 1:length(repro7$IntLitInt)) {
-  if(repro7$statut[i]=="P"){
-    repro7$IntLitInt[i]=0
+for (i in 1:nrow(repro7)) {
+  if(repro7$Jan[i]=="b"){
+    repro7$dumILI[i]=0
+  }else{
+    if(repro7$Jan[i]!="b"){
+      repro7$dumILI[i]=1
+    }
   }
 }
 
+repro7[20:60,c(2,3,5,14,16)]
 
-repro7[30:80,c(1,2,3,5,14,15,16)]
+
+
+write.csv(repro7, "ReproIntermediate2.csv")
+
+# I finally gave up and input the InterLitterInterval (ILI) manually. (shame on me, I know). For the ILI, I ordered the records by objectid, then year, and for each "b" in the Jan column, denoting a birth event:
+  # If it was the first event for that bear, ILI=0
+  # If it was not the first, ILI = # of year between that birth and the previous
+  # If there was no birth event, the ILI is blank (NA).
+  # No b event in Jan has a blank ILI.
+
+repro8 <- read.csv("ReproIntermediate3.csv")
 
 ```
 
+### Add in pedigree info
+
+
+```{r}
+
+pedigree <- read.table("Pedigree.txt", header = TRUE)
+names(pedigree)[1] <- "objectid"
+
+repro9 <- merge(repro8, pedigree, by="objectid")
+
+```
 
