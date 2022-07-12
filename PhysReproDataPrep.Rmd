@@ -11,6 +11,8 @@ knitr::opts_chunk$set(echo = TRUE)
 
 This Rmarkdownd will go through data prep for analysis of the physiological indicators of reproduction in brown bears (*Ursus arctos arctos*) in Sweden
 
+# Initial Package and Data Load
+
 ```{r, include=FALSE}
 # clear workspace and load packages
 rm(list = ls())
@@ -22,6 +24,8 @@ library(ggplot2)
 library(viridis)
 
 ```
+
+
 
 ```{r load data, include=FALSE}
 
@@ -139,13 +143,14 @@ bears.repro$weight <- as.numeric(bears.repro$weight)
 
 
 ```{r}
-bear.reprodata <- bears.repro %>%
-  rename(
-    repro=reprostatus.represent,
-    year=year.represent,
-    bearyear=bearyear.represent,
-    mass=weight
-  )
+library(dplyr)
+bear.reprodata <- bears.repro
+names(bear.reprodata)[5] <- "year"
+names(bear.reprodata)[7] <- "bearyear"
+names(bear.reprodata)[11] <- "repro"
+names(bear.reprodata)[15] <- "mass"
+
+
 ```
 
 
@@ -424,7 +429,7 @@ repro3[1:30,]
 
 
 
-### Add reprodusctive status
+### Add reproductive status
 
 ```{r}
 # change the long name of third column
@@ -529,7 +534,7 @@ minbirthfollowed$nbstatus <- as.numeric(as.character(minbirthfollowed$nbstatus))
 head(minbirthfollowed)
 
 #__________________________________________
-#create a dummy column to replace unknows with the status from the previous year
+#create a dummy column to replace unknowns with the status from the previous year
 #__________________________________________
 minbirthfollowed$dummy <- c("unknown", as.character(minbirthfollowed$Jan[-length(minbirthfollowed$Jan)]))
 
@@ -930,6 +935,61 @@ pedigree <- read.table("Pedigree.txt", header = TRUE)
 names(pedigree)[1] <- "objectid"
 
 repro9 <- merge(repro8, pedigree, by="objectid")
+names(repro9)[3] <- "LitterID"
+repro9$MatLitterID <- paste0(repro9$dam,".",repro9$birth)
+
+# Each female now has a LitterID that is a concatenation of their unique bearID
+# and the year in which they gave birth. Bears with known parentage now have a
+# MatLitterID that is a concatenation of their mother and birth year.
+# This should create a key binding a female and her cubs in a family group.
+
+write.csv(repro9, "ReproIntermediate4.csv")
 
 ```
+
+
+# Physiology covariates
+OK, so I have generated all these covariates relating to reproduction, but now I need to add back in the cortisol and stable isotope data and correct them
+
+## Physiology data
+
+Clear work space, load repro data and physiology data, join by bearID and finally clean up the dataframe
+
+### Clear workspace and load data
+
+```{r}
+
+rm(list=ls())
+
+PhysData <- read.csv("beardata_20220509.csv")
+ReproData <-read.csv("ReproIntermediate4.csv")
+
+```
+
+
+### Phys Bears
+We are only interested in the bear that we have physiology data from during spring captures
+
+```{r}
+PhysData$bearyear <- paste0(PhysData$BearID,".",PhysData$year)
+
+MRGDdf <- ReproData %>%
+  inner_join(PhysData, by="bearyear")
+MRGDbears <- unique(MRGDdf$BearID)
+
+```
+
+This leaves us with 424 observations of 172 unique individuals. This table was updated on 12 July 2022.
+
+As a final step, I opened the table in excel and removed extra columns and renamed columns and saved the final table as BearReproData_Analysis
+
+# Write Repro Table for Analysis
+```{r}
+
+write.csv(MRGDdf, "BearReproData20220712.csv")
+
+
+```
+
+
 

@@ -24,15 +24,27 @@ library(dplyr)
 library(GGally)
 library(viridis)
 library(lme4)
+library(INLA)
 
 P <- palette(viridis(8))
-bear.reprodata <- read.csv("bearreprodata.csv")
-bear.reprodata$fYEAR <- as.factor(bear.reprodata$fYEAR)
+bear.reprodata <- read.csv("BearReproData_Analysis.csv")
+bear.reprodata$fYEAR <- as.factor(bear.reprodata$year)
 bear.reprodata$Cmonth <- as.factor(bear.reprodata$Cmonth)
+bear.reprodata$reprofinal <- as.factor(bear.reprodata$reprofinal)
+
 
 ```
 
 ### Zuur 2.1
+
+#### Check for NA values
+
+```{r}
+
+colSums(is.na(bear.reprodata))
+
+```
+
 
 #### Cleveland Dot Plots
 
@@ -42,12 +54,17 @@ Identifying outliers and violations of homogeneity. Below I use Cleveland dotplo
 # Cleveland dotplot to ID outliers
 
 # First we look at 15N
+
 dotchart(bear.reprodata$N15,
-         groups = factor(bear.reprodata$repro),
+         main = "Cleveland Dotplot")
+
+dotchart(bear.reprodata$N15,
+         groups = factor(bear.reprodata$reprofinal),
          ylab= "Reproductive Category",
          xlab="Delta 15N",
          main="Cleveland Dotplot",
-         pch=bear.reprodata$repro)
+         color = bear.reprodata$reprofinal)
+
 
 # The spread of the data within each category looks good. There looks like there is one outlier in the WithMothercategory.
 
@@ -58,9 +75,9 @@ dotchart(bear.reprodata$cortisol.kitcorrected,
          ylab= "Reproductive Category",
          xlab="Hair Cortisol",
          main="Cleveland Dotplot",
-         pch=bear.reprodata$repro)
+         color = bear.reprodata$reprofinal)
 
-# Cortisol is a different story from 15N. There are several outliers in the Soliary female category and one in the WithCubs category. All three categories have similar spreads, but there does seem to be some structure to this, possibly violating our assumptions of homogeneity.
+# Cortisol is a different story from 15N. There are several outliers in the Soliary female category and one in the WithCubs category. All three categories have similar spreads, but there does seem to be some structure to this, possibly violating our assumptions of homogeneity.I think its a bit skewed
 
 
 ```
@@ -108,20 +125,20 @@ I start by looking at box plots across the obvious groups, the reproductive cate
 
 ```{r}
 
-ggplot(data = bear.reprodata, aes(repro,N15))+
-  geom_boxplot(aes(group=repro, fill=repro))+
+ggplot(data = bear.reprodata, aes(reprofinal,N15))+
+  geom_boxplot(aes(group=reprofinal, fill=reprofinal))+
   scale_fill_viridis(discrete = TRUE)+
   theme_classic()
 # Again, we see some indications that there are a few outliers.
 
-ggplot(data = bear.reprodata, aes(repro,cortisol.kitcorrected))+
-  geom_boxplot(aes(group=repro, fill=repro))+
+ggplot(data = bear.reprodata, aes(reprofinal,cortisol.kitcorrected))+
+  geom_boxplot(aes(group=reprofinal, fill=reprofinal))+
   scale_fill_viridis(discrete = TRUE)+
   theme_classic()
 # Here we see some outliers, mostly grouped in the Solitary female category
 
-ggplot(data = bear.reprodata, aes(repro,condition))+
-  geom_boxplot(aes(group=repro, fill=repro))+
+ggplot(data = bear.reprodata, aes(reprofinal,condition))+
+  geom_boxplot(aes(group=reprofinal, fill=reprofinal))+
   scale_fill_viridis(discrete = TRUE)+
   theme_classic()
 # This is a bit surprising, I expected solitary females to have the highest body condition. This could be driven by the general life-history of brown bears in that only bears that meet a certain threshold are able to reproduce, thus we may have a bunch of females who are unable to accumulate enough fat to reproduce in with the solitary female category. We assume this category is mostly femlaes who have just seperated from their litter and are looking to reproduce, but this may not be the case.
@@ -173,7 +190,7 @@ par(op)
 
 ```
 
-It looks like we may have a few issues here. Based on the QQ-plot, our residulas are not completely normally distributed, particularly at the extremes. No values have a Cook's distance greater than 1, no no values need to be considered for removal. There is definitely something happenning with the residuals vs fitted plot. This follows the pattern of 15N by year. So we have a violation of homogeneity here and Åanel A indicates some problem wit independence.
+It looks like we may have a few issues here. Based on the QQ-plot, our residulas are not completely normally distributed, particularly at the extremes. Several values have a Cook's distance greater than 1, so these values need to be considered for removal. There is definitely something happenning with the residuals vs fitted plot. This follows the pattern of 15N by year. So we have a violation of homogeneity here and Åanel A indicates some problem wit independence.
 
 ```{r}
 
