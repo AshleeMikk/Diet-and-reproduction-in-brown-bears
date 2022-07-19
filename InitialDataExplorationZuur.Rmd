@@ -9,11 +9,13 @@ output: word_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Moving from Data clean-up to initail data exploration
+# Moving from Data clean-up to initail data exploration
 
 In the PhysReproDataPrep.Rmd I went through and cleaned up and corrected my data. Now that I have removed any records with missing values and corrected my cortisol and stable isotope data, I can begin exploring my data.
 
 For my data exploration process, I will be following procedures described in "Mixed Effects Models and Extensions in Ecology with R" by Zuur et al. (2009)
+
+## Load Data & Packages
 
 ```{r}
 rm(list = ls())
@@ -30,14 +32,12 @@ P <- palette(viridis(8))
 bear.reprodata <- read.csv("BearReproData_Analysis.csv")
 bear.reprodata$fYEAR <- as.factor(bear.reprodata$year)
 bear.reprodata$Cmonth <- as.factor(bear.reprodata$Cmonth)
-bear.reprodata$reprofinal <- as.factor(bear.reprodata$reprofinal)
-
 
 ```
 
-### Zuur 2.1
+## Zuur 2.1
 
-#### Check for NA values
+### Check for NA values
 
 ```{r}
 
@@ -56,28 +56,30 @@ Identifying outliers and violations of homogeneity. Below I use Cleveland dotplo
 # First we look at 15N
 
 dotchart(bear.reprodata$N15,
-         main = "Cleveland Dotplot")
+         main = "Cleveland Dotplot",
+         xlab = "15N")
 
 dotchart(bear.reprodata$N15,
-         groups = factor(bear.reprodata$reprofinal),
+         groups = factor(bear.reprodata$reprocat),
          ylab= "Reproductive Category",
          xlab="Delta 15N",
          main="Cleveland Dotplot",
-         color = bear.reprodata$reprofinal)
+         color = factor(bear.reprodata$reprocat)
+         )
 
 
 # The spread of the data within each category looks good. There looks like there is one outlier in the WithMothercategory.
 
 
 # Now for cortisol
-dotchart(bear.reprodata$cortisol.kitcorrected,
-         groups = factor(bear.reprodata$repro),
+dotchart(bear.reprodata$cort,
+         groups = factor(bear.reprodata$reprocat),
          ylab= "Reproductive Category",
          xlab="Hair Cortisol",
          main="Cleveland Dotplot",
-         color = bear.reprodata$reprofinal)
+         color = factor(bear.reprodata$reprocat))
 
-# Cortisol is a different story from 15N. There are several outliers in the Soliary female category and one in the WithCubs category. All three categories have similar spreads, but there does seem to be some structure to this, possibly violating our assumptions of homogeneity.I think its a bit skewed
+# Cortisol is a different story from 15N. There are several outliers in the Soliary female category and WithCubs category. All three categories have similar spreads, but there does seem to be some structure to this, possibly violating our assumptions of homogeneity.I think its a bit skewed, no surprise in cort data
 
 
 ```
@@ -88,7 +90,7 @@ In addition to the dot plots, we also look at pairplots to identify any ovious r
 
 ```{r}
 
-PP.Table <- as.data.frame(cbind(bear.reprodata$year,bear.reprodata$age, bear.reprodata$N15, bear.reprodata$mass,bear.reprodata$headcirc,bear.reprodata$cortisol.kitcorrected, bear.reprodata$C13.suess, bear.reprodata$condition))
+PP.Table <- as.data.frame(cbind(bear.reprodata$year,bear.reprodata$age, bear.reprodata$N15, bear.reprodata$mass,bear.reprodata$headcirc,bear.reprodata$cort, bear.reprodata$C13.suess, bear.reprodata$condition))
 
 colnames(PP.Table) <- c("year","age","N15","mass","headcirc",
                         "cort","C13.suess","condition")
@@ -125,20 +127,20 @@ I start by looking at box plots across the obvious groups, the reproductive cate
 
 ```{r}
 
-ggplot(data = bear.reprodata, aes(reprofinal,N15))+
-  geom_boxplot(aes(group=reprofinal, fill=reprofinal))+
+ggplot(data = bear.reprodata, aes(reprocat,N15))+
+  geom_boxplot(aes(group=reprocat, fill=reprocat))+
   scale_fill_viridis(discrete = TRUE)+
   theme_classic()
 # Again, we see some indications that there are a few outliers.
 
-ggplot(data = bear.reprodata, aes(reprofinal,cortisol.kitcorrected))+
-  geom_boxplot(aes(group=reprofinal, fill=reprofinal))+
+ggplot(data = bear.reprodata, aes(reprocat,cort))+
+  geom_boxplot(aes(group=reprocat, fill=reprocat))+
   scale_fill_viridis(discrete = TRUE)+
   theme_classic()
 # Here we see some outliers, mostly grouped in the Solitary female category
 
-ggplot(data = bear.reprodata, aes(reprofinal,condition))+
-  geom_boxplot(aes(group=reprofinal, fill=reprofinal))+
+ggplot(data = bear.reprodata, aes(reprocat,condition))+
+  geom_boxplot(aes(group=reprocat, fill=reprocat))+
   scale_fill_viridis(discrete = TRUE)+
   theme_classic()
 # This is a bit surprising, I expected solitary females to have the highest body condition. This could be driven by the general life-history of brown bears in that only bears that meet a certain threshold are able to reproduce, thus we may have a bunch of females who are unable to accumulate enough fat to reproduce in with the solitary female category. We assume this category is mostly femlaes who have just seperated from their litter and are looking to reproduce, but this may not be the case.
@@ -211,20 +213,21 @@ This is a graph of \$\delta\$15N values by year with the fitted line from the mo
 ###### Hair cortisol
 
 ```{r}
-mbear.cort <- mean(bear.reprodata$cortisol.kitcorrected)
-sdbear.cort <- sd(bear.reprodata$cortisol.kitcorrected)
+mbear.cort <- mean(bear.reprodata$cort)
+sdbear.cort <- sd(bear.reprodata$cort)
 
-ggplot(data = bear.reprodata, aes(cortisol.kitcorrected))+
-  geom_histogram(binwidth = sd(bear.reprodata$cortisol.kitcorrected)/2, fill=P[2], alpha=0.8)+
+ggplot(data = bear.reprodata, aes(cort))+
+  geom_histogram(binwidth = sd(bear.reprodata$cort)/2, fill=P[2], alpha=0.8)+
   theme_classic()
-# The cortisol values are left skewed with a long tail. May need to be transformed
-bear.reprodata$ln.cortisol <- log(bear.reprodata$cortisol.kitcorrected)
+# The cortisol values are left skewed but it might be fine given linear regression models are robust to deviations from normalicy. Or I can use bayesian analysis and use a beta distribution.
+bear.reprodata$ln.cortisol <- log(bear.reprodata$cort)
 sd(bear.reprodata$ln.cortisol)/2
 ggplot(data = bear.reprodata, aes(ln.cortisol))+
   geom_histogram(binwidth =sd(bear.reprodata$ln.cortisol)/2 )+
   theme_classic()
+# The transformation does make it more normal, but I don't know that I like that option very much.
 
-CORTmodel <- lm(cortisol.kitcorrected~year, 
+CORTmodel <- lm(cort~year, 
                   data = bear.reprodata)
 summary(CORTmodel)
 
@@ -247,6 +250,7 @@ par(op)
 ```
 
 Log-transforming the cortisol values gives us a much more normal distribution and variance structure, though there is still something going on here. Apparently year was not as inoccuos place to start as I thought it was.There might be some auto-correlation structure here. (Chee Zuur CH 5-7).
+I may just need to use bayes analysis and specify non-normal distributions
 
 ###### Body condition
 
@@ -258,7 +262,7 @@ ggplot(data = bear.reprodata, aes(year, condition))+
   geom_point()+
   theme_classic()
 ggplot(data = bear.reprodata, aes(condition))+
-  geom_histogram(aes(fill=repro))+
+  geom_histogram(aes(fill=reprocat))+
   theme_classic()+
   scale_fill_viridis(discrete = TRUE, end = 0.8, begin = 0.2)
 
@@ -286,8 +290,8 @@ We have a lot of violations here, but it might be related to reproductive status
 
 ```{r}
 
-SATmodel <- lm(cortisol.kitcorrected~year+C13.suess+N15+
-                 condition+age+repro+repro*N15+condition*repro,
+SATmodel <- lm(cort~year+C13.suess+N15+
+                 condition+age+reprocat+reprocat*N15+condition*reprocat,
                data = bear.reprodata)
 summary(SATmodel)
 
@@ -301,7 +305,7 @@ Even when we consider almost all explanetory variables and interactions, we stil
 
 ##### Zuur 2.2 summary
 
-We may need to transform cortisol to meet the assumptions of normality year may be auto-correlated The body condition metric violates a lot of the linear regression assumptions We may need to use a generalized rather than general linear regression model.
+We may need to transform cortisol to meet the assumptions of normality year may be auto-correlated The body condition metric violates a lot of the linear regression assumptions We may need to use a generalized rather than general linear regression model. We can also use some bayesian analysis
 
 ### Time effects on N15 and C13
 

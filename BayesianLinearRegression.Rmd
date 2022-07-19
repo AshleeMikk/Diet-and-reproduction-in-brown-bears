@@ -1,5 +1,5 @@
 ---
-title: "Random effects"
+title: "Linear Regression Modelling of Reproduction"
 author: "Ashlee Mikkelsen"
 date: "`r Sys.Date()`"
 output: html_document
@@ -14,21 +14,19 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 
 rm(list = ls())
-setwd("~/Rprojects/Diet-and-reproduction-in-rown-bears")
+setwd("~/Rprojects/Diet-and-reproduction-in-rown-bears/UnivariateModel-FirstAttempt")
 
 library(ggplot2)
 library(dplyr)
 library(GGally)
 library(viridis)
 library(INLA)
-library(brinla)
 library(usdm)
 library(wiqid)
+library(lme4)
 
 P <- palette(viridis(8))
-bear.reprodata <- read.csv("ReproData_20220503.csv")
-bear.reprodata$fYEAR <- as.factor(bear.reprodata$fYEAR)
-bear.reprodata$Cmonth <- as.factor(bear.reprodata$Cmonth)
+bear.reprodata <- read.csv("BearReproData_Analysis.csv")
 str(bear.reprodata)
 
 ```
@@ -36,7 +34,7 @@ str(bear.reprodata)
 
 ## Hypothesis #1: Explaining variation in length of maternal care
 
-Maternal care = b0+ (b1 x cortisol)+(b2 x d15N)+(b3 x body condition)+(b4 x litter size) + (b5 x offspring condition) | BearID + family group
+Maternal care = b0+ (b1 x cortisol)+(b2 x d15N)+(b3 x d13C )(b4 x body condition)+(b5 x litter size) + (b6 x offspring condition) | BearID + family group
 
 I move through this analysis following Zuur et al. 2013.
 
