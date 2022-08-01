@@ -1,0 +1,132 @@
+---
+title: "MaternalCare Models"
+author: "Ashlee Mikkelsen"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Basic setup
+Load data and packages, set working directory
+
+```{r}
+
+setwd("~/Rprojects/Diet-and-reproduction-in-rown-bears/Univariate Models-First attempt")
+
+rm(list = ls())
+
+library(rjags)
+library(ggplot2)
+library(viridis)
+
+Bear.ReproData <- read.csv("BearReproData_Analysis.csv")
+
+MatCare <- subset(Bear.ReproData, weaningage!="unknown")
+MatCare <- subset(MatCare, statut!="unknown")
+
+```
+
+
+# Basic attempt at Maternal Care Model
+
+## Data Prep
+Below is my first attempt to write a multinomial logistic regression in JAGS to model one continuous (cort) and one categorical (parity) variable on the probability of a female spending 1.5 years with cubs vs. 2.5 years with cubs vs. lost litters
+
+```{r}
+
+## Step 1. Data setup
+### input values. Note below I avoid using the Primiparous (P)category because it is our reference level and the constant absorbs the reference
+
+# here we create dummy variables for each yi to determine which parity they belong to
+r1 <- as.numeric(MatCare$statut=="P")
+r2 <- as.numeric(MatCare$statut=="M")
+cort <- MatCare$cort
+
+# Here I create variables to hold the model outcome variables (length of maternal care)
+o1 <- as.numeric(MatCare$weaningage=="1.5")
+o2 <- as.numeric(MatCare$weaningage=="2.5")
+o3 <- as.numeric(MatCare$weaningage=="litterloss")
+
+# Dim all have same length
+N <- length(r2)
+
+
+```
+
+## Model Specification
+
+```{r}
+
+cat(
+  "
+  model{  # Open bracket1
+  for(i in 1:N){  ##open bracket2
+  ## outcome levels 2 and 3 (2.5 and litterloss)
+  o1[i]~dbern(pi1[i])
+  o2[i]~dbern(pi2[1])
+  o3[i]~dbern(pi3[i])
+  
+  ## Predictors
+  logit(pi1[i]) <- b0+b1*cort[i]+b2*r2[i]
+  logit(pi2[i]) <- b0+b1*cort[i]+b2*r2[i]
+  logit(pi3[i]) <- b0+b1*cort[i]+b2*r2[i]
+  } ## closed bracket 2
+  
+  ## Priors
+  b0~dnorm(0,0.001)
+  b1~dnorm(0,0.001)
+  b2~dnorm(0,0.001)
+  } #closed bracket1
+  ",
+  file = "BasicMCmodel.txt"
+)
+
+cat()
+
+```
+
+## Fit model and save output
+
+Below I run and fit the JAGS model
+
+```{r}
+
+JagsBasicMC <- jags.model("BasicMCmodel.txt",
+                          data = list("r2"=r2,
+                                      "o1"=o1,"o2"=o2,"o3"=o3,
+                                      "cort"=cort,"N"=N),
+                          n.chains = 3,
+                          n.adapt = 3000)
+
+update(JagsBasicMC,n.iter=5000,
+       n.thin=5)
+
+
+```
+
+And below I save the output. I also need to check convergence
+
+
+```{r}
+
+
+results <- coda.samples(JagsBasicMC,
+                        variable.names = c("b0","b1","b2"),
+                        n.iter=5000)
+res <- do.call(rbind.data.frame,results)
+
+
+# Posterion mean values
+apply(res,2,mean)
+
+# 95% credible interval
+apply(res,2,quantile,prob=0.05)
+
+apply(res,2,quantile,prob=0.95)
+
+
+```
+
