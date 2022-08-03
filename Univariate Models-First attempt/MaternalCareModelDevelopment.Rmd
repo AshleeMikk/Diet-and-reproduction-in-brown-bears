@@ -9,7 +9,15 @@ output: word_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Basic setup
+# Introduction
+
+Below I begin modelling one aspect of the relationship between physiology and reproduction in Brown bears in a monitored population in south-central Sweden: Variation in maternal care.
+
+The length of maternal care varies between family groups that stick together for 1.5 years and those who stick together for 2.5 years. There are evolutionary advantages to both strategies, and some females with between them and some always use the same strategy throughout their lives. Because brown bears have one of the lowest reproductive output on earth, variation in time between litters is important to population dynamics.
+
+I hypothesized that the balance between energetic demands and resource availability will affect reproductive fitness through the length of maternal care. Length of Maternal care may be affected by cortisol concentrations, d15N, female body condition, litter size, and offspring condition
+
+## Basic setup
 Load data and packages, set working directory
 
 ```{r}
@@ -21,6 +29,8 @@ rm(list = ls())
 library(rjags)
 library(ggplot2)
 library(viridis)
+library(jagsUI)
+library(wiqid)
 
 Bear.ReproData <- read.csv("BearReproData_Analysis.csv")
 
@@ -29,10 +39,224 @@ MatCare <- subset(MatCare, statut!="unknown")
 
 ```
 
+## Binomial Maternal Care
 
-# Basic attempt at Maternal Care Model
+I tried diving into multinomial modeling and got a bit lost in the weeds. So I am taking a step back and beginning with a basic logistic regression model. To do this, I will drop the litter loss category and only model the probability between length of maternal care of 2.5 years versus 1.5 years.
 
-## Data Prep
+### Data prep
+
+```{r}
+# Subset data to limit results to 2 categories
+DFbinom <-subset(MatCare, weaningage!="litterloss") 
+
+##### Covariate setup
+
+# For the categorical variable of parity, Primiparous (P) will be the refernce and multiparous will be the effect. 
+
+# create dummy variables for each yi to determine which parity they belong to
+MP <- as.numeric(DFbinom$statut=="M")
+Zcort <- standardize(DFbinom$cort)
+
+# create variable to hold the model outcome (length of maternal care). length of 1.5 is more common, so I will let that be the reference and longer maternal care the effect
+y <- as.numeric(DFbinom$weaningage=="2.5")
+
+# Dim all have same length
+N <- length(P)
+
+
+```
+
+### Model Specification
+
+```{r}
+
+cat(
+  "
+  model{  # begin model code
+  
+  for(i in 1:N){  ##begin likelihood
+  
+  ## Predictors
+  logit(p[i]) <- b0+b1*Zcort[i]+b2*MP[i]
+ 
+  ## outcome (LMC = 2.5)
+  y[i]~dbern(p[i])
+  
+  } ## end likelihood
+  
+  ## Priors
+  p0 ~ dbeta(1,1)
+  b0 <- logit(p0)
+  b1 ~ dunif(-5,5)
+  b2 ~ dunif(-5,5)
+  
+  } # end model code
+  ",
+  file = "BinomMCmodel_basic.txt"
+)
+
+
+```
+
+
+
+### Fit model, check convergence, and save output
+
+Below I run and fit the JAGS model
+
+```{r}
+
+BinomMC.data <- list(N=N, y=y,Zcort=Zcort,MP=MP)
+str(BinomMC.data)
+
+wanted <- c("b0","b1","b2")
+
+inits <- function(){
+  list(
+  b0=rnorm(1,-2,2),
+  b1=rnorm(0,-2,2),
+  b2=rnorm(1,-2,2)
+  )
+}
+
+JagsBinomMC <- jags(BinomMC.data,NULL,wanted,
+                    model="BinomMCmodel_basic.txt",
+                    n.chains = 4,n.adapt = 2000,n.iter = 10000,
+                    n.burnin = 2000, n.thin = 10, DIC = TRUE,
+                    parallel = TRUE)
+
+
+```
+
+And below I check convergence
+
+
+```{r}
+
+##### Check convergence
+JagsBinomMC_output <- mcmcOutput(JagsBinomMC)
+
+summary(JagsBinomMC_output)
+
+diagPlot(JagsBinomMC_output)
+
+postPlot(JagsBinomMC_output)
+
+```
+
+The model didn't really converge, and we can look at the beta estimates and say something about them, but there isn't a point because this is only an exercise
+
+
+
+## Adding Random effect of bearID to model
+
+There are several bears for which we have repeated measures and the number of repeated measures for each bear varies from 1 to 6 repeated measures. This data set contains 138 records for only 67 individual female bears.
+
+```{r}
+
+table(DFbinom$bearID)
+
+bear <- as.factor(MatCare$bearID)
+Nbear <- nlevels(bear)
+bear <- as.numeric(bear)
+sort(bear)
+
+
+```
+
+
+### BearID RE model
+```{r}
+cat(
+  "
+  model{  # Begin Model code
+  # Likelihood
+  for(i in 1:N){  ## begin likelihood loop
+  
+  ## Predictors
+  logit(pi2[i]) <- b0[bear[i]]+b1*Zcort[i]+b2*r2[i]
+  logit(pi3[i]) <- b0[bear[i]]+b1*Zcort[i]+b2*r2[i]
+  
+  ## outcome levels 2 and 3 (2.5 and litterloss)
+  o2[i]~dbern(pi2[1])
+  o3[i]~dbern(pi3[i])
+  
+  } ## end likelihood loop
+  
+  ## Priors
+  
+  for(j in 1:Nbear){  ### begin random intercept loop
+  b0[j]~dnorm(mu,tau)
+  } ### end random intercept loop
+  
+  b1~dnorm(0,0.001)
+  b2~dnorm(0,0.001)
+  
+  ## hyperpriors
+  pMean ~ dbeta(1,1)
+  mu <- logit(pMean)
+  sigma ~ dunif(0,5)
+  tau <- 1/sigma^2
+  } # end model code
+  ",
+  file = "BasicMCmodel_BearID.txt"
+)
+
+
+```
+
+### Fit model, check convergence, and save output
+
+```{r}
+
+ReBasicMC.data <- list("N"=N,"o2"=o2,"o3"=o3,"Zcort"=Zcort,"r2"=r2,
+                       "Nbear"=Nbear,"bear"=bear)
+str(ReBasicMC.data)
+
+REwanted <- c("b0","b1","b2", "mu", "sigma")
+
+inits <- function(){
+  list(
+  b0=rnorm(1,-2,2),
+  b1=rnorm(0,-2,2),
+  b2=rnorm(1,-2,2)
+  )
+}
+
+ReJagsBasicMC <- jags(ReBasicMC.data,NULL,REwanted,
+                    model="BasicMCmodel_BearID.txt",
+                    n.chains = 4,n.adapt = 2000,n.iter = 5000,
+                    n.burnin = 1000, n.thin = 5,
+                    parallel = TRUE)
+
+
+```
+
+check convergence
+
+```{r}
+
+##### Check convergence
+ReJagsBasicMC_output <- mcmcOutput(ReJagsBasicMC)
+
+summary(ReJagsBasicMC_output)
+
+diagPlot(ReJagsBasicMC_output)
+
+postPlot(ReJagsBasicMC_output)
+
+
+```
+
+
+
+
+
+
+
+## Multinomial Maternal Care Model
+
+### Data Prep
 Below is my first attempt to write a multinomial logistic regression in JAGS to model one continuous (cort) and one categorical (parity) variable on the probability of a female spending 1.5 years with cubs vs. 2.5 years with cubs vs. lost litters
 
 ```{r}
@@ -43,7 +267,7 @@ Below is my first attempt to write a multinomial logistic regression in JAGS to 
 # here we create dummy variables for each yi to determine which parity they belong to
 r1 <- as.numeric(MatCare$statut=="P")
 r2 <- as.numeric(MatCare$statut=="M")
-cort <- MatCare$cort
+Zcort <- standardize(MatCare$cort)
 
 # Here I create variables to hold the model outcome variables (length of maternal care)
 o1 <- as.numeric(MatCare$weaningage=="1.5")
@@ -56,7 +280,7 @@ N <- length(r2)
 
 ```
 
-## Model Specification
+### Model Specification
 
 ```{r}
 
@@ -70,9 +294,9 @@ cat(
   o3[i]~dbern(pi3[i])
   
   ## Predictors
-  logit(pi1[i]) <- b0+b1*cort[i]+b2*r2[i]
-  logit(pi2[i]) <- b0+b1*cort[i]+b2*r2[i]
-  logit(pi3[i]) <- b0+b1*cort[i]+b2*r2[i]
+  logit(pi1[i]) <- b0+b1*Zcort[i]+b2*r2[i]
+  logit(pi2[i]) <- b0+b1*Zcort[i]+b2*r2[i]
+  logit(pi3[i]) <- b0+b1*Zcort[i]+b2*r2[i]
   } ## closed bracket 2
   
   ## Priors
@@ -88,45 +312,152 @@ cat()
 
 ```
 
-## Fit model and save output
+### Fit model, check convergence, and save output
 
 Below I run and fit the JAGS model
 
 ```{r}
 
-JagsBasicMC <- jags.model("BasicMCmodel.txt",
-                          data = list("r2"=r2,
-                                      "o1"=o1,"o2"=o2,"o3"=o3,
-                                      "cort"=cort,"N"=N),
-                          n.chains = 3,
-                          n.adapt = 3000)
+BasicMC.data <- list("r2"=r2,"o1"=o1,"o2"=o2,"o3"=o3,"Zcort"=Zcort,"N"=N)
+str(BasicMC.data)
 
-update(JagsBasicMC,n.iter=5000,
-       n.thin=5)
+wanted <- c("b0","b1","b2")
+
+inits <- function(){
+  list(
+  b0=rnorm(1,-2,2),
+  b1=rnorm(0,-2,2),
+  b2=rnorm(1,-2,2)
+  )
+}
+
+JagsBasicMC <- jags(BasicMC.data,NULL,wanted,
+                    model="BasicMCmodel.txt",
+                    n.chains = 4,n.adapt = 2000,n.iter = 5000,
+                    n.burnin = 1000, n.thin = 5, DIC = TRUE,
+                    parallel = TRUE)
 
 
 ```
 
-And below I save the output. I also need to check convergence
+And below I check convergence
 
 
 ```{r}
 
+##### Check convergence
+JagsBasicMC_output <- mcmcOutput(JagsBasicMC)
 
-results <- coda.samples(JagsBasicMC,
-                        variable.names = c("b0","b1","b2"),
-                        n.iter=5000)
-res <- do.call(rbind.data.frame,results)
+summary(JagsBasicMC_output)
 
+diagPlot(JagsBasicMC_output)
 
-# Posterion mean values
-apply(res,2,mean)
-
-# 95% credible interval
-apply(res,2,quantile,prob=0.05)
-
-apply(res,2,quantile,prob=0.95)
+postPlot(JagsBasicMC_output)
 
 
 ```
+
+
+## Adding Random effect of bearID to model
+
+There are several bears for which we have repeated measures and the number of repeated measures for each bear varies from 1 to 8 repeated measures. This data set contains 152 records for only 67 individual female bears.
+
+```{r}
+
+table(MatCare$bearID)
+
+bear <- as.factor(MatCare$bearID)
+print(Nbear)
+Nbear <- nlevels(bear)
+bear <- as.numeric(bear)
+sort(bear)
+print(bear)
+
+
+```
+
+
+### BearID RE model
+```{r}
+cat(
+  "
+  model{  # Begin Model code
+  # Likelihood
+  for(i in 1:N){  ## begin likelihood loop
+  
+  ## Predictors
+  logit(pi2[i]) <- b0[bear[i]]+b1*Zcort[i]+b2*r2[i]
+  logit(pi3[i]) <- b0[bear[i]]+b1*Zcort[i]+b2*r2[i]
+  
+  ## outcome levels 2 and 3 (2.5 and litterloss)
+  o2[i]~dbern(pi2[1])
+  o3[i]~dbern(pi3[i])
+  
+  } ## end likelihood loop
+  
+  ## Priors
+  
+  for(j in 1:Nbear){  ### begin random intercept loop
+  b0[j]~dnorm(mu,tau)
+  } ### end random intercept loop
+  
+  b1~dnorm(0,0.001)
+  b2~dnorm(0,0.001)
+  
+  ## hyperpriors
+  pMean ~ dbeta(1,1)
+  mu <- logit(pMean)
+  sigma ~ dunif(0,5)
+  tau <- 1/sigma^2
+  } # end model code
+  ",
+  file = "BasicMCmodel_BearID.txt"
+)
+
+
+```
+
+### Fit model, check convergence, and save output
+
+```{r}
+
+ReBasicMC.data <- list("N"=N,"o2"=o2,"o3"=o3,"Zcort"=Zcort,"r2"=r2,
+                       "Nbear"=Nbear,"bear"=bear)
+str(ReBasicMC.data)
+
+REwanted <- c("b0","b1","b2", "mu", "sigma")
+
+inits <- function(){
+  list(
+  b0=rnorm(1,-2,2),
+  b1=rnorm(0,-2,2),
+  b2=rnorm(1,-2,2)
+  )
+}
+
+ReJagsBasicMC <- jags(ReBasicMC.data,NULL,REwanted,
+                    model="BasicMCmodel_BearID.txt",
+                    n.chains = 4,n.adapt = 2000,n.iter = 5000,
+                    n.burnin = 1000, n.thin = 5,
+                    parallel = TRUE)
+
+
+```
+
+check convergence
+
+```{r}
+
+##### Check convergence
+ReJagsBasicMC_output <- mcmcOutput(ReJagsBasicMC)
+
+summary(ReJagsBasicMC_output)
+
+diagPlot(ReJagsBasicMC_output)
+
+postPlot(ReJagsBasicMC_output)
+
+
+```
+
 
