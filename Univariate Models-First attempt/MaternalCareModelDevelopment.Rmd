@@ -34,8 +34,10 @@ library(wiqid)
 
 Bear.ReproData <- read.csv("BearReproData_Analysis.csv")
 
-MatCare <- subset(Bear.ReproData, weaningage!="unknown")
-MatCare <- subset(MatCare, statut!="unknown")
+MatCare <- subset(Bear.ReproData, reprocat=="Wcubs")
+str(MatCare)
+colSums(is.na(MatCare))
+
 
 ```
 
@@ -150,13 +152,13 @@ The model didn't really converge, and we can look at the beta estimates and say 
 
 ## Adding Random effect of bearID to model
 
-There are several bears for which we have repeated measures and the number of repeated measures for each bear varies from 1 to 6 repeated measures. This data set contains 138 records for only 67 individual female bears.
+There are several bears for which we have repeated measures and the number of repeated measures for each bear varies from 1 to 6 repeated measures. This data set contains 138 records for only 60 individual female bears.
 
 ```{r}
 
 table(DFbinom$bearID)
 
-bear <- as.factor(MatCare$bearID)
+bear <- as.factor(DFbinom$bearID)
 Nbear <- nlevels(bear)
 bear <- as.numeric(bear)
 sort(bear)
@@ -169,19 +171,17 @@ sort(bear)
 ```{r}
 cat(
   "
-  model{  # Begin Model code
-  # Likelihood
-  for(i in 1:N){  ## begin likelihood loop
+  model{  # begin model code
+  
+  for(i in 1:N){  ##begin likelihood
   
   ## Predictors
-  logit(pi2[i]) <- b0[bear[i]]+b1*Zcort[i]+b2*r2[i]
-  logit(pi3[i]) <- b0[bear[i]]+b1*Zcort[i]+b2*r2[i]
+  logit(p[i]) <- b0[bear[i]]+b1*Zcort[i]+b2*MP[i]
+ 
+  ## outcome (LMC = 2.5)
+  y[i]~dbern(p[i])
   
-  ## outcome levels 2 and 3 (2.5 and litterloss)
-  o2[i]~dbern(pi2[1])
-  o3[i]~dbern(pi3[i])
-  
-  } ## end likelihood loop
+  } ## end likelihood
   
   ## Priors
   
@@ -189,19 +189,19 @@ cat(
   b0[j]~dnorm(mu,tau)
   } ### end random intercept loop
   
-  b1~dnorm(0,0.001)
-  b2~dnorm(0,0.001)
+  b1 ~ dunif(-5,5)
+  b2 ~ dunif(-5,5)
   
   ## hyperpriors
   pMean ~ dbeta(1,1)
   mu <- logit(pMean)
   sigma ~ dunif(0,5)
   tau <- 1/sigma^2
+  
   } # end model code
   ",
-  file = "BasicMCmodel_BearID.txt"
+  file = "ReBinomMCmodel_BearID.txt"
 )
-
 
 ```
 
@@ -209,11 +209,10 @@ cat(
 
 ```{r}
 
-ReBasicMC.data <- list("N"=N,"o2"=o2,"o3"=o3,"Zcort"=Zcort,"r2"=r2,
-                       "Nbear"=Nbear,"bear"=bear)
-str(ReBasicMC.data)
+ReBinomMC.data <- list(N=N, y=y,Zcort=Zcort,MP=MP, Nbear=Nbear, bear=bear)
+str(ReBinomMC.data)
 
-REwanted <- c("b0","b1","b2", "mu", "sigma")
+wanted <- c("b0","b1","b2", "mu","sigma")
 
 inits <- function(){
   list(
@@ -223,10 +222,10 @@ inits <- function(){
   )
 }
 
-ReJagsBasicMC <- jags(ReBasicMC.data,NULL,REwanted,
-                    model="BasicMCmodel_BearID.txt",
-                    n.chains = 4,n.adapt = 2000,n.iter = 5000,
-                    n.burnin = 1000, n.thin = 5,
+ReJagsBinomMC <- jags(ReBinomMC.data,NULL,wanted,
+                    model="ReBinomMCmodel_BearID.txt",
+                    n.chains = 4,n.adapt = 2000,n.iter = 10000,
+                    n.burnin = 2000, n.thin = 10, DIC = TRUE,
                     parallel = TRUE)
 
 
@@ -237,16 +236,20 @@ check convergence
 ```{r}
 
 ##### Check convergence
-ReJagsBasicMC_output <- mcmcOutput(ReJagsBasicMC)
+ReJagsBinomMC_output <- mcmcOutput(ReJagsBinomMC)
 
-summary(ReJagsBasicMC_output)
+summary(ReJagsBinomMC_output)
 
-diagPlot(ReJagsBasicMC_output)
+diagPlot(ReJagsBinomMC_output)
 
-postPlot(ReJagsBasicMC_output)
+postPlot(ReJagsBinomMC_output)
 
 
 ```
+
+## Adding more covariates to complete the logistic model
+
+I successfully built and ran a logistic model with one random effect, one continuous fixed effect, and one categorical fixed effect. I now need to complete my model. I need to include a random effect of year, because initial data exploration revealed annual variation in diet and cortisol. Annual variation may also contibute to variation in length of maternal care. I also need to include the fixed effects: d15N, d13C, body condition, litter size, and mean offspring condition. In the future, I will also need to include individual diet estimates, but that will be after I finally get MixSIAR to converge. 
 
 
 

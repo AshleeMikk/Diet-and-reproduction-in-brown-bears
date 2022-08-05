@@ -7,14 +7,14 @@
   o3[i]~dbern(pi3[i])
   
   ## Predictors
-  logit(pi1[i]) <- b0+b1*cort[i]+b2*r2[i]
-  logit(pi2[i]) <- b0+b1*cort[i]+b2*r2[i]
-  logit(pi3[i]) <- b0+b1*cort[i]+b2*r2[i]
+  logit(pi1[i]) <- b0+b1*Zcort[i]+b2*r2[i]
+  logit(pi2[i]) <- b0+b1*Zcort[i]+b2*r2[i]
+  logit(pi3[i]) <- b0+b1*Zcort[i]+b2*r2[i]
   } ## closed bracket 2
   
   ## Priors
   b0~dnorm(0,0.001)
-  b1~dnorm(0,0.001)
+  b1~dunif(0-5,5)
   b2~dnorm(0,0.001)
   } #closed bracket1
   
