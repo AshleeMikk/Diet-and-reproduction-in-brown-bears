@@ -31,6 +31,7 @@ library(ggplot2)
 library(viridis)
 library(jagsUI)
 library(wiqid)
+library(GGally)
 
 Bear.ReproData <- read.csv("BearReproData_Analysis.csv")
 
@@ -63,7 +64,7 @@ Zcort <- standardize(DFbinom$cort)
 y <- as.numeric(DFbinom$weaningage=="2.5")
 
 # Dim all have same length
-N <- length(P)
+N <- length(MP)
 
 
 ```
@@ -152,7 +153,7 @@ The model didn't really converge, and we can look at the beta estimates and say 
 
 ## Adding Random effect of bearID to model
 
-There are several bears for which we have repeated measures and the number of repeated measures for each bear varies from 1 to 6 repeated measures. This data set contains 138 records for only 60 individual female bears.
+There are several bears for which we have repeated measures and the number of repeated measures for each bear varies from 1 to 6 repeated measures. This data set contains 139 records for only 60 individual female bears.
 
 ```{r}
 
@@ -249,8 +250,239 @@ postPlot(ReJagsBinomMC_output)
 
 ## Adding more covariates to complete the logistic model
 
-I successfully built and ran a logistic model with one random effect, one continuous fixed effect, and one categorical fixed effect. I now need to complete my model. I need to include a random effect of year, because initial data exploration revealed annual variation in diet and cortisol. Annual variation may also contibute to variation in length of maternal care. I also need to include the fixed effects: d15N, d13C, body condition, litter size, and mean offspring condition. In the future, I will also need to include individual diet estimates, but that will be after I finally get MixSIAR to converge. 
+I successfully built and ran a logistic model with one random effect, one continuous fixed effect, and one categorical fixed effect. I now need to complete my model. I need to include a random effect of year, because initial data exploration revealed annual variation in diet and cortisol. Annual variation may also contribute to variation in length of maternal care. I also need to include the fixed effects: d15N, d13C, body condition, litter size, and mean offspring condition. In the future, I will also need to include individual diet estimates, but that will be after I finally get MixSIAR to converge.
 
+```{r}
+#################
+## Rename variables for easier typing
+colnames(DFbinom)[11] <- "LitSize"
+colnames(DFbinom)[15] <- "LMC"
+colnames(DFbinom)[22] <- "d13C"
+colnames(DFbinom)[23] <- "d15N"
+colnames(DFbinom)[26] <- "MatCond"
+colnames(DFbinom)[28] <- "MatCort"
+colnames(DFbinom)[29] <- "LitCond"
+colnames(DFbinom)[30] <- "LitCort"
+
+```
+
+
+
+
+### Do I expect any interactions?
+In preparing the full model, I need to deterimne if there are any important interactions that I need to model. 
+
+There could be an interaction between body condition and litter size. Females may have too large of a litter, requiring longer maternal care while females in good condition may have the same litter size but seperate sooner. Therefore, I need to include (body condition*littersize).
+
+LMC = b0+ b1 x Cortisol + b2 x N15 + b3 x C13+ b4 x MaternalBC + b5 x LitterSize + b6 x LitterBC + b7 x age + b8 x (MaternalBC x LiiterSize) 
+
+For random effects, I need to include BearID and Year
+
+## Checking Independent variables for colinearity and violations of homogeneity and underlying structure in the data.
+
+### Colinearity
+
+```{r}
+BiNomMC.NumVar <- DFbinom[,c(3,6,11,22,23,26,28,29)]
+
+pairs(BiNomMC.NumVar)
+
+ggpairs(BiNomMC.NumVar)
+
+res <- cor(BiNomMC.NumVar, method = c("pearson", "kendall", "spearman"))
+print(res)
+corrplot::corrplot(res)
+
+# Maternal cort is highly correlated with year.
+ggplot(data = BiNomMC.NumVar, aes(year, MatCort))+
+  geom_jitter(width = 0.2)
+
+# Maternal cond is highly correlated with year.
+ggplot(data = BiNomMC.NumVar, aes(year, MatCond))+
+  geom_jitter(width = 0.2)
+
+# Litter size is correlated with age
+ggplot(data = BiNomMC.NumVar, aes(age, LitSize))+
+  geom_jitter(width = 0.2)
+# Eh, It's mostly driven by 5 and 6 yr old bears. And this is no surprise and not really concerning.
+
+
+# Litter cond is highly correlated with year. And follows the same pattern as maternal condition
+ggplot(data = BiNomMC.NumVar, aes(year, LitCond))+
+  geom_jitter(width = 0.2)
+
+# Maternal condition and maternal cort are weak to moderately correlated
+# Maternal cond is highly correlated with year.
+ggplot(data = BiNomMC.NumVar, aes(MatCort, MatCond))+
+  geom_jitter(width = 0.002)
+
+
+
+
+
+```
+
+### Clevelnad dot plots
+
+```{r}
+
+#######################
+#year
+dotchart(DFbinom$year,
+         groups = factor(DFbinom$LMC),
+         ylab= "LengthMaternalCare",
+         xlab="year",
+         main="Cleveland Dotplot",
+         color = factor(DFbinom$LMC)
+         )
+# There are plenty of years in which we do not have values for 2.5, but since I am not modeling this as a trend, but only a random effect, this should not be a problem. I will need to turn year into a factor though.
+
+DFbinom$fYR <- as.factor(DFbinom$year)
+
+#######################
+#age
+dotchart(DFbinom$age,
+         groups = factor(DFbinom$LMC),
+         ylab= "Length Maternal Care",
+         xlab="age",
+         main="Cleveland Dotplot",
+         color = factor(DFbinom$LMC)
+         )
+ggplot(data = DFbinom, aes(age))+
+  geom_histogram(aes(fill=LMC), binwidth = 1)+
+  scale_fill_viridis(discrete = TRUE, begin = 0.2, end = 0.8)+
+  theme_classic()+
+  scale_x_continuous(breaks = seq(4,24,1))
+
+# sampe size decreases with age, which isn't surprising. We only have samples for both lengths of MC for ages 5-18. I would be fine in trimming my data down
+DFbinom2 <- subset(DFbinom, age > 4)
+DFbinom <- subset(DFbinom2, age < 19)
+
+#######################
+# litter size
+dotchart(DFbinom$LitSize,
+         groups = factor(DFbinom$LMC),
+         ylab= "LengthMaternalCare",
+         xlab="Litter Size",
+         main="Cleveland Dotplot",
+         color = factor(DFbinom$LMC)
+         )
+
+# Fantastic. We have an uneven distribution of samples within categories, but theyare at least represented within each litter size
+
+#######################
+# Carbon
+dotchart(DFbinom$d13C,
+         groups = factor(DFbinom$LMC),
+         ylab= "LengthMaternalCare",
+         xlab="d13C",
+         main="Cleveland Dotplot",
+         color = factor(DFbinom$LMC)
+         )
+
+#######################
+# Nitrogen
+dotchart(DFbinom$d15N,
+         groups = factor(DFbinom$LMC),
+         ylab= "LengthMaternalCare",
+         xlab="d15N",
+         main="Cleveland Dotplot",
+         color = factor(DFbinom$LMC)
+         )
+
+#######################
+# Maternal Condition
+dotchart(DFbinom$MatCond,
+         groups = factor(DFbinom$LMC),
+         ylab= "LengthMaternalCare",
+         xlab="Maternal Condition",
+         main="Cleveland Dotplot",
+         color = factor(DFbinom$LMC)
+         )
+
+#######################
+# Maternal Cortisol
+dotchart(DFbinom$MatCort,
+         groups = factor(DFbinom$LMC),
+         ylab= "LengthMaternalCare",
+         xlab="Maternal Cortisol",
+         main="Cleveland Dotplot",
+         color = factor(DFbinom$LMC)
+         )
+# I have two of those notorious outliers in this dataset. I need to keep that in mind and should compare the final model results with an analysis without those two outliers
+
+#######################
+# Litter Condition
+dotchart(DFbinom$LitCond,
+         groups = factor(DFbinom$LMC),
+         ylab= "Length Maternal Care",
+         xlab="Litter Condition",
+         main="Cleveland Dotplot",
+         color = factor(DFbinom$LMC)
+         )
+# OK. Something is really going on here. 
+
+
+rows <- sample(nrow(DFbinom))
+RandoSort <- DFbinom[rows,]
+
+dotchart(RandoSort$LitCond,
+         groups = factor(RandoSort$LMC),
+         ylab= "Length Maternal Care",
+         xlab="Litter Condition",
+         main="Cleveland Dotplot",
+         color = factor(RandoSort$LMC)
+         )
+# It just so happened that the table was ordered by litter condition.
+
+# Litter Condition
+dotchart(DFbinom$LitCort,
+         groups = factor(DFbinom$LMC),
+         ylab= "Length Maternal Care",
+         xlab="Litter Cort",
+         main="Cleveland Dotplot",
+         color = factor(DFbinom$LMC)
+         )
+
+colSums(is.na(DFbinom))
+
+# I am missing too many values for litter cort. I am going to have to drop that covariate.
+
+```
+
+
+
+## Specifying the full model
+
+```{r}
+
+cat(
+  "
+  model{  # begin model code
+  
+  for(i in 1:N){  ##begin likelihood
+  
+  ## Predictors
+  logit(p[i]) <- b0+b1*Zcort[i]+b2*MP[i]
+ 
+  ## outcome (LMC = 2.5)
+  y[i]~dbern(p[i])
+  
+  } ## end likelihood
+  
+  ## Priors
+  p0 ~ dbeta(1,1)
+  b0 <- logit(p0)
+  b1 ~ dunif(-5,5)
+  b2 ~ dunif(-5,5)
+  
+  } # end model code
+  ",
+  file = "BinomMCmodel_basic.txt"
+)
+
+
+```
 
 
 
