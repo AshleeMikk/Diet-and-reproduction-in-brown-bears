@@ -270,7 +270,7 @@ colnames(DFbinom)[30] <- "LitCort"
 
 
 ### Do I expect any interactions?
-In preparing the full model, I need to deterimne if there are any important interactions that I need to model. 
+In preparing the full model, I need to determine if there are any important interactions that I need to model. 
 
 There could be an interaction between body condition and litter size. Females may have too large of a litter, requiring longer maternal care while females in good condition may have the same litter size but seperate sooner. Therefore, I need to include (body condition*littersize).
 
@@ -295,34 +295,36 @@ corrplot::corrplot(res)
 
 # Maternal cort is highly correlated with year.
 ggplot(data = BiNomMC.NumVar, aes(year, MatCort))+
-  geom_jitter(width = 0.2)
+  geom_jitter(width = 0.2)+
+  theme_classic()
 
 # Maternal cond is highly correlated with year.
 ggplot(data = BiNomMC.NumVar, aes(year, MatCond))+
-  geom_jitter(width = 0.2)
+  geom_jitter(width = 0.2)+
+  theme_classic()
 
 # Litter size is correlated with age
 ggplot(data = BiNomMC.NumVar, aes(age, LitSize))+
-  geom_jitter(width = 0.2)
+  geom_jitter(width = 0.2)+
+  theme_classic()
 # Eh, It's mostly driven by 5 and 6 yr old bears. And this is no surprise and not really concerning.
 
 
 # Litter cond is highly correlated with year. And follows the same pattern as maternal condition
 ggplot(data = BiNomMC.NumVar, aes(year, LitCond))+
-  geom_jitter(width = 0.2)
+  geom_jitter(width = 0.2)+
+  theme_classic()
 
 # Maternal condition and maternal cort are weak to moderately correlated
 # Maternal cond is highly correlated with year.
 ggplot(data = BiNomMC.NumVar, aes(MatCort, MatCond))+
-  geom_jitter(width = 0.002)
-
-
-
+  geom_jitter(width = 0.002)+
+  theme_classic()
 
 
 ```
 
-### Clevelnad dot plots
+### Cleveland dot plots
 
 ```{r}
 
@@ -451,19 +453,47 @@ colSums(is.na(DFbinom))
 ```
 
 
+### Z-transform all continuous variables
+
+I already transformed cortisol for early model development. Now I need to trandform the others
+
+```{r}
+
+
+Zcort <- standardize(DFbinom$MatCort)
+Zage <- standardize(DFbinom$age)
+Zlitsize <- standardize(DFbinom$LitSize)
+Z13C <- standardize(DFbinom$d13C)
+Z15N <- standardize(DFbinom$d15N)
+Zmatcond <- standardize(DFbinom$MatCond)
+Zmatcort <- standardize(DFbinom$MatCort)
+Zlitcond <-as.numeric(standardise_aes_names(DFbinom$LitCond))
+
+```
+
 
 ## Specifying the full model
+
+LMC = b0+ b1 x Cortisol + b2 x N15 + b3 x C13+ b4 x MaternalBC + b5 x LitterSize + b6 x LitterBC + b7 x age + b8 x (MaternalBC x LiiterSize) +(1|BearID) + (1|year)
 
 ```{r}
 
 cat(
-  "
+ "
   model{  # begin model code
   
   for(i in 1:N){  ##begin likelihood
   
   ## Predictors
-  logit(p[i]) <- b0+b1*Zcort[i]+b2*MP[i]
+  logit(p[i]) <- b0[bear[i]]+
+                  bCORT*Zcort[i]+
+                  bMP*MP[i]+
+                  b15N*Z15N[i]+
+                  b13C*Z13C[i]+
+                  bMatBC*Zmatcond[i]+
+                  bLitSize*Zlitsize[i]+
+                  bLitBC*Zlitcond[i]+
+                  bAge*Zage[i]
  
   ## outcome (LMC = 2.5)
   y[i]~dbern(p[i])
@@ -471,18 +501,352 @@ cat(
   } ## end likelihood
   
   ## Priors
-  p0 ~ dbeta(1,1)
-  b0 <- logit(p0)
-  b1 ~ dunif(-5,5)
-  b2 ~ dunif(-5,5)
+  
+  for(j in 1:Nbear){  ### begin random intercept loop
+    b0[j]~dnorm(mu,tau)
+  } ### end random intercept loop
+  
+  bCORT ~ dunif(-5,5)
+  bMP ~ dunif(-5,5)
+  b15N ~ dunif(-5,5)
+  b13C ~ dunif(-5,5)
+  bMatBC ~ dunif(-5,5)
+  bLitSize ~ dunif(-5,5)
+  bLitBC ~ dunif(-5,5)
+  bAge ~ dunif(-5,5)
+
+  
+  ## hyperpriors
+  
+  pMean ~ dbeta(1,1)
+  mu <- logit(pMean)
+  sigma ~ dunif(0, 5)
+  tau <- 1/sigma^2
+  
   
   } # end model code
   ",
-  file = "BinomMCmodel_basic.txt"
+  file = "ReBinomMCmodel_Full.txt"
 )
+
+```
+
+
+### Run and check model
+
+```{r}
+# create dummy variables for each yi to determine which parity they belong to
+MP <- as.numeric(DFbinom$statut=="M")
+# create variable to hold the model outcome (length of maternal care). length of 1.5 is more common, so I will let that be the reference and longer maternal care the effect
+y <- as.numeric(DFbinom$LMC=="2.5")
+# Dim all have same length
+N <- length(MP)
+
+bear <- as.factor(DFbinom$bearID)
+Nbear <- nlevels(bear)
+bear <- as.numeric(bear)
+sort(bear)
+
+
+ReBinomMC.Fulldata <- list(N=N, y=y,Zcort=Zcort,MP=MP, Nbear=Nbear,
+                           bear=bear,Z15N=Z15N, Z13C=Z13C, Zmatcond=Zmatcond,
+                           Zlitsize=Zlitsize, Zlitcond=Zlitcond, Zage=Zage)
+str(ReBinomMC.Fulldata)
+
+wanted.Full <- c("bCORT", "bMP", "b15N", "b13C", "bMatBC", "bLitSize",
+            "bLitBC", "bAge", "bMBCxLS","pMean", "mu", "sigma", "b0")
+
+inits <- function(){
+  list(
+  b0=rnorm(1,-2,2),
+  b1=rnorm(0,-2,2),
+  b2=rnorm(1,-2,2)
+  )
+}
+
+ReJagsBinomMC.Full <- jags(ReBinomMC.Fulldata,NULL,wanted.Full,
+                    model="ReBinomMCmodel_Full.txt",
+                    n.chains = 4,n.adapt = 50000,n.iter = 1000000,
+                    n.burnin = 50000, n.thin = 50, DIC = TRUE,
+                    parallel = TRUE)
 
 
 ```
+
+### Check convergence
+
+```{r}
+
+ReJagsBinomMC.Full_output <- mcmcOutput(ReJagsBinomMC.Full)
+
+J <- summary(ReJagsBinomMC.Full_output)
+K <- as.data.frame(J[1:9,])
+print(K)
+
+write.csv(K,"LMC_JagsFullModelOutput.csv")
+
+Test <- read.csv("LMC_JagsFullModelOutput.csv")
+
+diagPlot(ReJagsBinomMC.Full_output)
+
+postPlot(ReJagsBinomMC.Full_output)
+
+autocorr.diag(as.mcmc(ReJagsBinomMC.Full_output))
+
+
+```
+
+
+
+
+## Specifying the reduced model
+
+After running the full model and looking at the output, the only parameters with moderate or greater support was the effect of d15N, maternal body condition, and bear age. I chose to retain the variables and run a reduced model whose output would be less messy:
+
+LMC = b0+ b1 x N15 + b2 x MaternalBC + b3 x age +(1|BearID)
+
+```{r}
+
+cat(
+ "
+  model{  # begin model code
+  
+  for(i in 1:N){  ##begin likelihood
+  
+  ## Predictors
+  logit(p[i]) <- b0[bear[i]]+
+                  b15N*Z15N[i]+
+                  bMatBC*Zmatcond[i]+
+                  bAge*Zage[i]
+ 
+  ## outcome (LMC = 2.5)
+  y[i]~dbern(p[i])
+  
+  } ## end likelihood
+  
+  ## Priors
+  
+  for(j in 1:Nbear){  ### begin random intercept loop
+    b0[j]~dnorm(mu,tau)
+  } ### end random intercept loop
+  
+  
+  b15N ~ dunif(-5,5)
+  bMatBC ~ dunif(-5,5)
+  bAge ~ dunif(-5,5)
+
+  
+  ## hyperpriors
+  
+  pMean ~ dbeta(1,1)
+  mu <- logit(pMean)
+  sigma ~ dunif(0, 5)
+  tau <- 1/sigma^2
+  
+  
+  } # end model code
+  ",
+  file = "ReBinomMCmodel_Reduced.txt"
+)
+
+```
+
+
+### Run and check model
+
+```{r}
+# create dummy variables for each yi to determine which parity they belong to
+MP <- as.numeric(DFbinom$statut=="M")
+# create variable to hold the model outcome (length of maternal care). length of 1.5 is more common, so I will let that be the reference and longer maternal care the effect
+y <- as.numeric(DFbinom$LMC=="2.5")
+# Dim all have same length
+N <- length(MP)
+
+
+ReBinomMC.Reduceddata <- list(N=N, y=y,Nbear=Nbear,bear=bear,Z15N=Z15N, 
+                              Zmatcond=Zmatcond, Zage=Zage)
+str(ReBinomMC.Reduceddata)
+
+wanted.Reduced <- c("b15N", "bMatBC", "bAge", "pMean", "mu", "sigma", "b0")
+
+inits <- function(){
+  list(
+  b0=rnorm(1,-2,2),
+  b1=rnorm(0,-2,2),
+  b2=rnorm(1,-2,2)
+  )
+}
+
+ReJagsBinomMC.Reduced <- jags(ReBinomMC.Reduceddata,NULL,wanted.Reduced,
+                    model="ReBinomMCmodel_Reduced.txt",
+                    n.chains = 4,n.adapt = 50000,n.iter = 1000000,
+                    n.burnin = 50000, n.thin = 50, DIC = TRUE,
+                    parallel = TRUE)
+
+
+```
+
+### Check convergence
+
+```{r}
+
+ReJagsBinomMC.Reduced_output <- mcmcOutput(ReJagsBinomMC.Reduced)
+
+J2 <- summary(ReJagsBinomMC.Reduced_output)
+K2 <- as.data.frame(J2[1:9,])
+print(K2)
+
+write.csv(K2,"LMC_JagsReducedModelOutput.csv")
+
+diagPlot(ReJagsBinomMC.Reduced_output)
+
+postPlot(ReJagsBinomMC.Reduced_output)
+
+autocorr.diag(as.mcmc(ReJagsBinomMC.Reduced_output))
+
+
+
+```
+
+
+### Interpreting model parameters
+
+```{r}
+
+max(Z15N)
+min(Z15N)
+NewZ15N <- seq(-2.9,2.9,0.0585)
+MZ15N <- rep(mean(Z15N),100)
+
+min(Zmatcond)
+max(Zmatcond)
+NewZMatCond <- seq(-2.7,2.2, 0.0493)
+MZMBC <- rep(mean(Zmatcond),100)
+
+min(Zage)
+max(Zage)
+NewZage <- seq(-1.3,2.2, 0.0352)
+MZAGE <- rep(mean(Zage),100)
+
+
+LMCage <- vector(length = 100)
+LMCmbc <- vector(length = 100)
+LMCn <- vector(length = 100)
+
+for (i in 1:100) {
+  LMCage[i]=(exp(0.186+
+               (0.36*MZ15N[i])+
+               (-0.568*MZMBC[i])+
+               (1.009*NewZage[i])))/(1+(exp(0.186+
+               (0.36*MZ15N[i])+
+               (-0.568*MZMBC[i])+
+               (1.009*NewZage[i]))))
+  
+}
+
+for (i in 1:100) {
+  LMCmbc[i]=(exp(0.186+
+               (0.36*MZ15N[i])+
+               (-0.568*NewZMatCond[i])+
+               (1.009*MZAGE[i])))/(1+(exp(0.186+
+               (0.36*MZ15N[i])+
+               (-0.568*NewZMatCond[i])+
+               (1.009*MZAGE[i]))))
+  
+}
+
+
+for (i in 1:100) {
+  LMCn[i]=(exp(0.186+
+               (0.36*NewZ15N[i])+
+               (-0.568*MZMBC[i])+
+               (1.009*MZAGE[i])))/(1+(exp(0.186+
+               (0.36*NewZ15N[i])+
+               (-0.568*MZMBC[i])+
+               (1.009*MZAGE[i]))))
+  
+}
+
+
+New.Dat <- cbind(NewZ15N,NewZMatCond,NewZage, LMCmbc, LMCage,LMCn)
+New.Dat <- as.data.frame(New.Dat)
+Mage <- mean(DFbinom$age)
+SDage <- sd(DFbinom$age)
+New.Dat$age <- ((New.Dat$NewZage*SDage)+Mage)
+Mmbc <- mean(DFbinom$MatCond)
+SDmbc <- sd(DFbinom$MatCond)
+New.Dat$MBC <- ((New.Dat$NewZMatCond*SDmbc)+Mmbc)
+M15n <- mean(DFbinom$d15N)
+SDn <- sd(DFbinom$d15N)
+New.Dat$d15N <- ((New.Dat$NewZ15N*SDn)+M15n)
+
+mytheme <- theme(
+    axis.text = element_text(size = 18,face = "bold"),
+    axis.title = element_text(size = 20, face = "bold"),
+    panel.grid.major = element_line(color = "grey92"),
+    panel.grid.minor = element_line(color = "grey96"),
+    panel.background = element_rect(fill = "white"),
+    axis.line = element_line(colour = "black",size = 1),
+    axis.ticks = element_line(size = 1),
+    )
+
+
+
+ggplot(data = New.Dat, aes(NewZage,LMCage))+
+  geom_line()+
+  geom_point()+
+  theme_classic()+
+  mytheme
+
+ggplot(data = New.Dat, aes(age,LMCage))+
+  geom_line(lwd=1.2)+
+  theme_classic()+
+  scale_y_continuous(breaks = seq(0,1,0.25),
+                     limits =c(0,1))+
+  scale_x_continuous(expand = c(0,0),
+                     breaks = seq(6,18,2))+
+  ylab("Probability Of Maternal Care 2.5 years")+
+  xlab("Female Age")+
+  mytheme
+
+
+ggplot(data = New.Dat, aes(NewZ15N,LMCn))+
+  geom_line()+
+  geom_point()+
+  theme_classic()
+
+ggplot(data = New.Dat, aes(d15N,LMCn))+
+  geom_line(lwd=1.2)+
+  theme_classic()+
+  scale_y_continuous(breaks = seq(0,1,0.25),
+                     limits =c(0,1))+
+  scale_x_continuous(expand = c(0,0),
+                     breaks = seq(3,6,0.5))+
+  ylab("Probability Of Maternal Care 2.5 years")+
+  xlab("Female d15N ")+
+  mytheme
+
+ggplot(data = New.Dat, aes(NewZMatCond,LMCmbc))+
+  geom_line()+
+  geom_point()+
+  theme_classic()
+
+ggplot(data = New.Dat, aes(MBC,LMCmbc))+
+  geom_line(lwd=1.2)+
+  theme_classic()+
+  scale_y_continuous(breaks = seq(0,1,0.25),
+                     limits =c(0,1))+
+  scale_x_continuous(expand = c(0,0),
+                     breaks = seq(0,2,0.2))+
+  ylab("Probability Of Maternal Care 2.5 years")+
+  xlab("Female Body Condition")+
+  mytheme
+
+
+
+
+```
+
 
 
 
