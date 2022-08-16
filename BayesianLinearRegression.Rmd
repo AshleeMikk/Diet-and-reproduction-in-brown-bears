@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 ```
 
 
@@ -28,6 +28,8 @@ library(lme4)
 P <- palette(viridis(8))
 bear.reprodata <- read.csv("BearReproData_Analysis.csv")
 str(bear.reprodata)
+
+###HEY SHANNON
 
 ```
 
