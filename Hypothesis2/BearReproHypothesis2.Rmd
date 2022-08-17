@@ -1,0 +1,155 @@
+---
+title: "ReproHy2DataDevelopment"
+author: "Ashlee Mikkelsen"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Brown Bear Reproduction Hypothesis #2
+
+## Overview
+ Below I begin the process of cleaning data, building covariates, and writing models for the second hypothesis regarding brown bear reproduction:
+ 
+ There is a physiological difference between females with offspring, females newly seperated from offspring, and females who failed to reproduce detectable in brown bear hair.
+
+Cortisol is known to interfere with important reproductive hormones, such as progesterone and testosterone, as well as indicate the overall metabolic demand or "stress" and individual is under. Bears under severe metabolic demands should be less likely to implant embryos and miss years of reproduction. Females may alter how long they remain with their cubs based on energetic demands and life-history trade-offs. Offspring that are developmentally delayed or females who are not yet ready to reproduce again may delay family seperation to give themselves or their offspring another year of development. Alternitively, because brown bears are long lived, they may favor future reproduction over at the cost of current reproduction. Bears under greater metabolic demands may be more likely to forage in high reward but risky areas near male bears to replenish their own body condition at the cost of increased infanticide risk.  
+ 
+ The underlying model for this hypothesis is as follows:
+ 
+ female hair cortisol = b0+ b1 x parity+ b2 x d15N+ b3 x d13C+
+  b4 x female body condition+ b5 x years since last litter+ b6 x litter size+
+  b7 x offspring body condition+ b8 x inter-litter interval+
+  b9 x length of care+ b10 x proportion diet+  (1|BearID)+(1|year)
+  
+## Expected relationships
+
+### CORT- d15N
+
+Cortisol and diet are intimately tied together, as bears with higher diet quality and quantity can sustain higher energetic demands before reaching a physiological emergency state. As reproduction is extremely energetically demanding, I expect two different relationships. 
+  In the first scenario, bears with high cortisol have low d15N signatures, which indicates relatively lower intake of high-protein foods. Cortisol will decrease with increrasing protein-rich foods, but may increase linearly or in a non-linear way. Cortisol may decrease slowly at first until a certain threshold is reached, after which it decreases rapidly. Conversely cortisol may rapidly decrease with greater protein consumption until protein demands are met and the benefit of ingesting protein tapers off.
+  In the second scenario, the relationship between cortisol and d15N is quadratic, where bears with diets less protein have moderate cortisol concentrations, which decrease and d15N increases to median levels. Beyond the median d15N concentration, cortisol increases. This relationship may have different mechanisms. One may be related to high d15N signatures related to muscle breakdown that results from protein deficiency and starvation. The second results from increased metabolic demands in bears who consume an excess of protein and must burn energy to excrete the nitrogen and disspate excess heat.
+
+  To model these relationships, I will need to use higher order or ln-transformed d15N values to determine which relationship best fits my data, then include only that term in the final model.
+  
+### CORT- offspring body condition
+
+I expect simpler relationships between cortisol and offspring body condition. corisol should indicate the females' energetic demands and condition. Females under fewer satressors should have offspring in better condition, if the female prioritizes current reproduction over her own physiological demands. There may also be a quadratic relationship in which females with high cortisol have litters with poor body condition because the entire family is under overwhelming energetic demands. Offspring condition should improve as maternal cortisol decreases, however at a certain point, sustaining a litter with very high body condition may begin to incur high energetic costs to the female, increasing her cortisol. We ay also see the inverse of this relationship in which poor offspring condition is associated with low cortsiol, related to HPA exhaustion, and as HPA activity increase, so does offspring body condition until a threshold is reached in which sustaining a litter with high body condition becomes energetically too much.
+
+  To model these relationships, I will need to test linear and quadratic offspring condition terms.
+  
+### CORT- maternal body condition
+
+As with offspring condition, The simplest relationship between maternal condition and maternal cortisol concentration would be a linear decrease in cortisol as body condition increases. This insinuates that females in better condition are under fewer metabolic demands and maintain low cortisol concentrations. In addition, the relationship between maternal body condition and maternal cortisol may be log-linear. We may see high cortisol associated with low body condition, which decreases to median body conditions, where it becomes stable. We may also see two different quadratic relationships. One would open upward and indicate a stabilizing selective relationship in which bears with median body conditions also have low cort levels. Bears with body conditions below the median may be under environmatal streesors and greater energetic demands, while bears above the median body condition may be incurring an energetic cost to maintain greater fat or muscle mass. If the quadratic relationship opens downwards, females in poor condition would have low cort, related to HPA exhaustion or downregulation, prehaps related to reproduction, and cort would increase to median body conditions, beyond which the cost of maintaining greater fat and lean mass may incur an energetic cost.
+
+### CORT- years since last litter
+
+Yrs since last litter should be a categorical variable. I expect that the cortisol will be highest one year after their last birth, as offspring have the highest dependence on females during that time. It should bee lower when it has been 2 years since the last littler, then increase again.
+
+### CORT- Litter size. 
+
+Cort should be greater with larger litter sizes, as caring for more young should have a higher energetic cost.
+
+### CORT- Length Maternal Care
+
+I expect length of maternal care to eihter increase with cortisol,  as bears under more energetic demands may need a longer period to fully grow. Conversely, females under energetic demands may seperate from their cubs earlier to preserve their own condition. As a result, there may be an interaction between cortisol and length of matrnal care.
+
+### CORT- parity
+
+young, inexperienced mothers typically have lower success, therefore I expect primiparous bears to have higher cortisol than multiparous bears
+
+### CORT-year
+
+I expect cortisol to vary annually with many unmeasured environmental variables. Because I do not have a complete time series and likely have missing data across years, I have to make the effect of year categorical rather than continuous.
+
+### CORT- Bear ID
+
+Because I have repeated measures on bears, I expect cortisol across years to be more similar within the same bear than between bears. However, I do expect the above covariates to affect the cortisol of the same bear sampled over many years.
+
+
+# Data exploration and prep
+
+## load data and packages
+
+```{r}
+
+setwd("~/Rprojects/Diet-and-reproduction-in-rown-bears/Hypothesis2")
+HP2.dat <- read.csv("BearReproData_H2Analysis.csv")
+
+Cort.Repro <- HP2.dat[,c(1,3,6,10,11,12,13,14,15,16,22,23,26,28)]
+Cort.Repro <- subset(Cort.Repro, reprocat!="Wmother")
+
+library(ggplot2)
+library(GGally)
+
+colSums(is.na(Cort.Repro))
+
+mytheme <- theme(
+    axis.text = element_text(size = 18,face = "bold"),
+    axis.title = element_text(size = 20, face = "bold"),
+    panel.grid.major = element_line(color = "grey92"),
+    panel.grid.minor = element_line(color = "grey96"),
+    panel.background = element_rect(fill = "white"),
+    axis.line = element_line(colour = "black",size = 1),
+    axis.ticks = element_line(size = 1),
+    )
+
+```
+
+#### Side bar
+Litter CORT and litter condition are missing too many records to include, but did have some interesting implications, so quickly I examine them on their own
+
+
+```{r}
+
+side.bar <- HP2.dat[,c(1,3,6,10,11,12,13,14,15,16,22,23,26,28,29,30)]
+side.bar <- subset(Cort.Repro, reprocat!="Wmother")
+side.bar <- subset(side.bar,littercort!="NA")
+
+SB.NumVar <- side.bar[,c(2,3,5,11,12,13,14,15,16)]
+
+pairs(SB.NumVar)
+
+ggpairs(SB.NumVar)
+
+
+```
+
+There are some interesting things here that are worth returning to and exploring. Maybe a bit about maternal trade-offs
+
+## Independence, colinearity and homogeneity
+
+Checking Independent variables for colinearity and violations of homogeneity and underlying structure in the data.
+
+
+### Colinearity
+
+```{r}
+
+CR.NumVar <- Cort.Repro[,c(2,3,5,11,12,13,14)]
+
+pairs(CR.NumVar)
+
+ggpairs(CR.NumVar)
+
+res <- cor(CR.NumVar, method = c("pearson", "kendall", "spearman"))
+print(res)
+corrplot::corrplot(res)
+
+# year and Cort are pretty correlated
+ggplot(data = Cort.Repro, aes(year, cort))+
+  geom_point()+
+  mytheme
+## Cort is increasing through the years, but it is also becoming more variable
+
+# Age and condition are moderately correlated, unsurprisingly
+ggplot(data = Cort.Repro, aes(age, condition))+
+  geom_point()+
+  mytheme
+
+```
+
+No covariates are soo correlated that they cannot be included in the same model
