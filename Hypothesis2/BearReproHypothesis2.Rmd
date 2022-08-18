@@ -35,12 +35,6 @@ Cortisol and diet are intimately tied together, as bears with higher diet qualit
 
   To model these relationships, I will need to use higher order or ln-transformed d15N values to determine which relationship best fits my data, then include only that term in the final model.
   
-### CORT- offspring body condition
-
-I expect simpler relationships between cortisol and offspring body condition. corisol should indicate the females' energetic demands and condition. Females under fewer satressors should have offspring in better condition, if the female prioritizes current reproduction over her own physiological demands. There may also be a quadratic relationship in which females with high cortisol have litters with poor body condition because the entire family is under overwhelming energetic demands. Offspring condition should improve as maternal cortisol decreases, however at a certain point, sustaining a litter with very high body condition may begin to incur high energetic costs to the female, increasing her cortisol. We ay also see the inverse of this relationship in which poor offspring condition is associated with low cortsiol, related to HPA exhaustion, and as HPA activity increase, so does offspring body condition until a threshold is reached in which sustaining a litter with high body condition becomes energetically too much.
-
-  To model these relationships, I will need to test linear and quadratic offspring condition terms.
-  
 ### CORT- maternal body condition
 
 As with offspring condition, The simplest relationship between maternal condition and maternal cortisol concentration would be a linear decrease in cortisol as body condition increases. This insinuates that females in better condition are under fewer metabolic demands and maintain low cortisol concentrations. In addition, the relationship between maternal body condition and maternal cortisol may be log-linear. We may see high cortisol associated with low body condition, which decreases to median body conditions, where it becomes stable. We may also see two different quadratic relationships. One would open upward and indicate a stabilizing selective relationship in which bears with median body conditions also have low cort levels. Bears with body conditions below the median may be under environmatal streesors and greater energetic demands, while bears above the median body condition may be incurring an energetic cost to maintain greater fat or muscle mass. If the quadratic relationship opens downwards, females in poor condition would have low cort, related to HPA exhaustion or downregulation, prehaps related to reproduction, and cort would increase to median body conditions, beyond which the cost of maintaining greater fat and lean mass may incur an energetic cost.
@@ -84,6 +78,8 @@ Cort.Repro <- subset(Cort.Repro, reprocat!="Wmother")
 
 library(ggplot2)
 library(GGally)
+library(wiqid)
+library(jagsUI)
 
 colSums(is.na(Cort.Repro))
 
@@ -152,4 +148,213 @@ ggplot(data = Cort.Repro, aes(age, condition))+
 
 ```
 
-No covariates are soo correlated that they cannot be included in the same model
+No covariates are so correlated that they cannot be included in the same model
+
+
+### Ceveland Dot plots
+
+```{r}
+
+### Cleveland dot plots
+
+
+#######################
+#year
+dotchart(Cort.Repro$year,
+         groups = factor(Cort.Repro$reprocat),
+         ylab= "Repro Category",
+         xlab="year",
+         main="Cleveland Dotplot",
+         color = factor(Cort.Repro$reprocat)
+         )
+Cort.Repro$fYR <- as.factor(Cort.Repro$year)
+
+#######################
+#age
+dotchart(Cort.Repro$age,
+         groups = factor(Cort.Repro$reprocat),
+         ylab= "Repro Category",
+         xlab="age",
+         main="Cleveland Dotplot",
+         color = factor(Cort.Repro$reprocat)
+         )
+
+
+#######################
+# d13C
+dotchart(Cort.Repro$C13.suess,
+         groups = factor(Cort.Repro$reprocat),
+         ylab= "Repro Category",
+         xlab="d13C",
+         main="Cleveland Dotplot",
+         color = factor(Cort.Repro$reprocat)
+         )
+
+#######################
+# d15N
+dotchart(Cort.Repro$N15,
+         groups = factor(Cort.Repro$reprocat),
+         ylab= "Repro Category",
+         xlab="d15N",
+         main="Cleveland Dotplot",
+         color = factor(Cort.Repro$reprocat)
+         )
+
+#######################
+# female condition
+dotchart(Cort.Repro$condition,
+         groups = factor(Cort.Repro$reprocat),
+         ylab= "Repro Category",
+         xlab="female body condition",
+         main="Cleveland Dotplot",
+         color = factor(Cort.Repro$reprocat)
+         )
+
+#######################
+# cort
+dotchart(Cort.Repro$cort,
+         groups = factor(Cort.Repro$reprocat),
+         ylab= "Repro Category",
+         xlab="cortisol",
+         main="Cleveland Dotplot",
+         color = factor(Cort.Repro$reprocat)
+         )
+
+
+ggplot(data = Cort.Repro, aes(ILI, condition))+
+  geom_jitter(width = 0.1,aes(color=weaningage))+
+  geom_boxplot(aes(group=ILI), alpha=0.4)
+
+ggplot(data = Cort.Repro, aes(ILI, N15))+
+  geom_jitter(width = 0.1, aes(color=weaningage))+
+  geom_boxplot(aes(group=ILI), alpha=0.4)
+
+
+
+```
+
+I did not see anything in the Cleveland dotplots that has me concerned about unidentified structure within the data
+
+#### Side bar
+
+```{r}
+
+
+ggplot(data = Cort.Repro, aes(ILI, cort))+
+  geom_jitter(width = 0.1)+
+  geom_boxplot(aes(group=ILI), alpha=0.4)
+
+```
+It might be interesting to compare females who we know eventually reproduced (the BP category) and those who we have no known reproduction for (NKR)
+
+### Non-linear covariates
+
+Below I build covarites to model the non-linear relationships described above
+
+```{r}
+
+Cort.Repro$N15sq <- Cort.Repro$N15^2
+Cort.Repro$N15ln <- log(Cort.Repro$N15)
+
+Cort.Repro$conditionsq <- Cort.Repro$condition^2
+
+```
+
+
+
+
+### Z-transform continuous covariates
+
+```{r}
+Cort.Repro$fYR <- as.factor(Cort.Repro$year)
+Cort.Repro$Zage <- standardize(Cort.Repro$age)
+Cort.Repro$Zlitsize <- standardize(Cort.Repro$cubsfirstcount)
+Cort.Repro$Zd13C <- standardize(Cort.Repro$C13.suess)
+Cort.Repro$Zd15N <- standardize(Cort.Repro$N15)
+Cort.Repro$Zd15Nsq <- standardize(Cort.Repro$N15sq)
+Cort.Repro$Zd15Nln <- standardize(Cort.Repro$N15ln)
+Cort.Repro$Zcond <- standardize(Cort.Repro$condition)
+Cort.Repro$Zcondsq <- standardize(Cort.Repro$conditionsq)
+Cort.Repro$Zcort <- standardize(Cort.Repro$cort)
+
+```
+
+
+# Univariate models
+
+Before I build a full model, I need to address the two variables that I hypothesized could take various shapes. To do this, I will compare simple models with only the effect of interest, determine which covariate has the best support, and then include that covariate in the full model.
+
+
+
+### d15N
+
+```{r}
+
+# create variable to hold the model outcome (Cortisol).
+y <- Cort.Repro$cort
+
+# Dim all have same length
+N <- length(y)
+
+Zd15N <- Cort.Repro$Zd15N
+
+table(Cort.Repro$bearID)
+
+bear <- as.factor(Cort.Repro$bearID)
+Nbear <- nlevels(bear)
+bear <- as.numeric(bear)
+sort(bear)
+
+# So this dataset has 273 records of 94 different individuals whose captures range from 1 to 11
+
+
+### Linear model
+cat(
+  "
+  model{  # begin model code
+  
+  for(i in 1:N){  ##begin likelihood
+  
+  ## Predictors
+  mu[i] <- b0[bear[i]]+b1*Zd15N[i]
+ 
+  ## outcome
+  y[i]~dnorm(mu1[i],tau1)
+  
+  } ## end likelihood
+  
+  ## Priors
+  
+  for(j in 1:Nbear){  ### begin random intercept loop
+  b0[j]~dnorm(mu2,tau2)
+  } ### end random intercept loop
+  
+  b1 ~ dnorm(0,0.01)
+  
+  ## hyperpriors
+  pMean ~ dbeta(1,1)
+  mu1 <- logit()
+  mu2 <- logit(pMean)
+  sigma ~ dunif(0,10)
+  tau <- 1/sigma^2
+  
+  } # end model code
+  ",
+  file = "Hyp2_LINd15N.txt"
+)
+
+LINd15N.data <- list(N=N, y=y, bear=bear, Nbear=Nbear, Zd15N=Zd15N)
+str(LINd15N.data)
+
+wanted <- c("b0","b1","pMean","mu","sigma","tau")
+
+
+JagsHyp2LINd15N <- jags(LINd15N.data,NULL,wanted,
+                    model="Hyp2_LINd15N.txt",
+                    n.chains = 4,n.adapt = 2000,n.iter = 10000,
+                    n.burnin = 2000, n.thin = 10, DIC = TRUE,
+                    parallel = TRUE)
+
+
+```
+
