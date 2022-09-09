@@ -6,7 +6,7 @@ output: word_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 ```
 
 # Introduction
@@ -17,7 +17,7 @@ The length of maternal care varies between family groups that stick together for
 
 I hypothesized that the balance between energetic demands and resource availability will affect reproductive fitness through the length of maternal care. Length of Maternal care may be affected by cortisol concentrations, d15N, female body condition, litter size, and offspring condition
 
-## Basic setup
+### Basic setup
 Load data and packages, set working directory
 
 ```{r}
@@ -32,6 +32,7 @@ library(viridis)
 library(jagsUI)
 library(wiqid)
 library(GGally)
+library(MCMCvis)
 
 Bear.ReproData <- read.csv("BearReproData_Analysis.csv")
 
@@ -42,10 +43,7 @@ colSums(is.na(MatCare))
 
 ```
 
-## Binomial Maternal Care
-
-I tried diving into multinomial modeling and got a bit lost in the weeds. So I am taking a step back and beginning with a basic logistic regression model. To do this, I will drop the litter loss category and only model the probability between length of maternal care of 2.5 years versus 1.5 years.
-
+# Step 1: Building a basic Models
 ### Data prep
 
 ```{r}
@@ -65,7 +63,6 @@ y <- as.numeric(DFbinom$weaningage=="2.5")
 
 # Dim all have same length
 N <- length(MP)
-
 
 ```
 
@@ -98,7 +95,6 @@ cat(
   file = "BinomMCmodel_basic.txt"
 )
 
-
 ```
 
 
@@ -128,7 +124,6 @@ JagsBinomMC <- jags(BinomMC.data,NULL,wanted,
                     n.burnin = 2000, n.thin = 10, DIC = TRUE,
                     parallel = TRUE)
 
-
 ```
 
 And below I check convergence
@@ -151,9 +146,11 @@ The model didn't really converge, and we can look at the beta estimates and say 
 
 
 
-## Adding Random effect of bearID to model
+# Step 2: Adding Random effects to model
 
 There are several bears for which we have repeated measures and the number of repeated measures for each bear varies from 1 to 6 repeated measures. This data set contains 139 records for only 60 individual female bears.
+
+### BearID RE model
 
 ```{r}
 
@@ -164,11 +161,10 @@ Nbear <- nlevels(bear)
 bear <- as.numeric(bear)
 sort(bear)
 
-
 ```
 
 
-### BearID RE model
+
 ```{r}
 cat(
   "
@@ -206,7 +202,7 @@ cat(
 
 ```
 
-### Fit model, check convergence, and save output
+#### Fit model, check convergence, and save output
 
 ```{r}
 
@@ -215,20 +211,11 @@ str(ReBinomMC.data)
 
 wanted <- c("b0","b1","b2", "mu","sigma")
 
-inits <- function(){
-  list(
-  b0=rnorm(1,-2,2),
-  b1=rnorm(0,-2,2),
-  b2=rnorm(1,-2,2)
-  )
-}
-
 ReJagsBinomMC <- jags(ReBinomMC.data,NULL,wanted,
                     model="ReBinomMCmodel_BearID.txt",
                     n.chains = 4,n.adapt = 2000,n.iter = 10000,
                     n.burnin = 2000, n.thin = 10, DIC = TRUE,
                     parallel = TRUE)
-
 
 ```
 
@@ -248,7 +235,106 @@ postPlot(ReJagsBinomMC_output)
 
 ```
 
-## Adding more covariates to complete the logistic model
+
+### Year & Bear ID RE model
+
+#### create year variable
+```{r}
+
+table(DFbinom$year)
+
+yr <- as.factor(DFbinom$year)
+Nyr <- nlevels(yr)
+yr <- as.numeric(yr)
+
+```
+
+
+#### write model code
+```{r}
+cat(
+  "
+  model{  # begin model code
+  
+  for(i in 1:N){  ##begin likelihood
+  
+  ## Predictors
+  logit(p[i]) <- b0 + b1*Zcort[i]+b2*MP[i] + eps_bear[bear[i]]+
+  eps_year[yr[i]]
+ 
+  ## outcome (LMC = 2.5)
+  y[i]~dbern(p[i])
+  
+  } ## end likelihood
+  
+  ## Priors
+  
+  for(i in 1:Nbear){  ### begin individual random intercept loop
+  eps_bear[i]~dnorm(0,bear_tau)
+  } ### end individual random intercept loop
+  
+  for(i in 1:Nyr){  ### begin individual random intercept loop
+  eps_year[i]~dnorm(0,year_tau)
+  } ### end individual random intercept loop
+  
+  b0 ~ dnorm(0, 0.368) #a bit of a better uniform prior for logit space
+  b1 ~ dnorm(0, 0.368)
+  b2 ~ dnorm(0, 0.368)
+  
+  ## hyperpriors
+  
+  ### individual bear RI
+  bsigma ~ dunif(0,5)
+  bear_tau <- pow(bsigma,-2)
+  
+  ### year RI
+  ysigma ~ dunif(0,5)
+  year_tau <- pow(ysigma,-2)
+  
+  } # end model code
+  ",
+  file = "ReBinomMCmodel_YR_BearID.txt"
+)
+
+```
+
+#### Fit model, check convergence, and save output
+
+```{r}
+
+ReBinom_YrBID.data <- list(N=N, y=y,Zcort=Zcort,MP=MP, Nbear=Nbear,bear=bear,
+                       Nyr=Nyr,yr=yr)
+str(ReBinom_YrBID.data)
+
+wanted <- c("b0","b1","b2", "bsigma","ysigma")
+
+
+ReJagsBinomMC <- jags(ReBinom_YrBID.data,NULL,wanted,
+                    model="ReBinomMCmodel_YR_BearID.txt",
+                    n.chains = 4,n.adapt = 20000,n.iter = 1000000,
+                    n.burnin = 20000, n.thin = 50, DIC = TRUE,
+                    parallel = TRUE)
+
+```
+
+check convergence
+
+```{r}
+
+##### Check convergence
+ReJagsBinomMC_output <- mcmcOutput(ReJagsBinomMC)
+
+summary(ReJagsBinomMC_output)
+Pb0<-exp(-2.155)/(1+exp(-2.155))
+
+diagPlot(ReJagsBinomMC_output)
+
+postPlot(ReJagsBinomMC_output)
+
+
+```
+
+# Step 3: Adding more covariates
 
 I successfully built and ran a logistic model with one random effect, one continuous fixed effect, and one categorical fixed effect. I now need to complete my model. I need to include a random effect of year, because initial data exploration revealed annual variation in diet and cortisol. Annual variation may also contribute to variation in length of maternal care. I also need to include the fixed effects: d15N, d13C, body condition, litter size, and mean offspring condition. In the future, I will also need to include individual diet estimates, but that will be after I finally get MixSIAR to converge.
 
@@ -267,7 +353,7 @@ colnames(DFbinom)[30] <- "LitCort"
 ```
 
 
-
+## Covariate relationships
 
 ### Do I expect any interactions?
 In preparing the full model, I need to determine if there are any important interactions that I need to model. 
@@ -278,9 +364,9 @@ LMC = b0+ b1 x Cortisol + b2 x N15 + b3 x C13+ b4 x MaternalBC + b5 x LitterSize
 
 For random effects, I need to include BearID and Year
 
-## Checking Independent variables for colinearity and violations of homogeneity and underlying structure in the data.
+### Checking Independent variables for colinearity and violations of homogeneity and underlying structure in the data.
 
-### Colinearity
+#### Colinearity
 
 ```{r}
 BiNomMC.NumVar <- DFbinom[,c(3,6,11,22,23,26,28,29)]
@@ -321,10 +407,9 @@ ggplot(data = BiNomMC.NumVar, aes(MatCort, MatCond))+
   geom_jitter(width = 0.002)+
   theme_classic()
 
-
 ```
 
-### Cleveland dot plots
+#### Cleveland dot plots
 
 ```{r}
 
@@ -453,28 +538,201 @@ colSums(is.na(DFbinom))
 ```
 
 
-### Z-transform all continuous variables
+#### Transform all continuous variables
 
-I already transformed cortisol for early model development. Now I need to trandform the others
 
 ```{r}
 
 
-Zcort <- standardize(DFbinom$MatCort)
-Zage <- standardize(DFbinom$age)
-Zlitsize <- standardize(DFbinom$LitSize)
-Z13C <- standardize(DFbinom$d13C)
-Z15N <- standardize(DFbinom$d15N)
-Zmatcond <- standardize(DFbinom$MatCond)
-Zmatcort <- standardize(DFbinom$MatCort)
-Zlitcond <-as.numeric(standardise_aes_names(DFbinom$LitCond))
+Zcort <- (DFbinom$MatCort-mean(DFbinom$MatCort))/(2*sd(DFbinom$MatCort))
+Zage <- (DFbinom$age-mean(DFbinom$age))/(2*sd(DFbinom$age))
+Zlitsize <-(DFbinom$LitSize-mean(DFbinom$LitSize))/(2*sd(DFbinom$LitSize))
+Z13C <- (DFbinom$d13C-mean(DFbinom$d13C))/(2*sd(DFbinom$d13C))
+Z15N <- (DFbinom$d15N-mean(DFbinom$d15N))/(2*sd(DFbinom$d15N))
+Zmatcond <- (DFbinom$MatCond-mean(DFbinom$MatCond))/(2*sd(DFbinom$MatCond))
+Zlitcond <-(DFbinom$LitCond-mean(DFbinom$LitCond))/(2*sd(DFbinom$LitCond))
 
 ```
 
 
-## Specifying the full model
+# Specifying the full model
 
-LMC = b0+ b1 x Cortisol + b2 x N15 + b3 x C13+ b4 x MaternalBC + b5 x LitterSize + b6 x LitterBC + b7 x age + b8 x (MaternalBC x LiiterSize) +(1|BearID) + (1|year)
+## Maternal BC
+
+LMC = b0+ b1 x Cortisol + b2 x N15 + b3 x C13+ b4 x MaternalBC + b5 x LitterSize + b6 x age  + b8 x (MaternalBC x LiiterSize) +(1|BearID) + (1|year)
+
+### Model structure
+
+```{r}
+
+cat(
+ "
+  model{  # begin model code
+    # - scaling continuous predictors so they have mean 0 and sd = 0.5
+  # - using a non-informative Cauchy prior dt(0, pow(2.5,-2), 1) 
+  
+  for(i in 1:N){  ##begin likelihood
+  
+  ## Predictors
+  logit(p[i]) <- b0+
+                  bCORT*Zcort[i]+
+                  bMP*MP[i]+
+                  b15N*Z15N[i]+
+                  b13C*Z13C[i]+
+                  bLitSize*Zlitsize[i]+
+                  bMatBC*Zmatcond[i]+
+                  bAge*Zage[i]+
+                  bMBCxLS*(Zmatcond[i]*Zlitsize[i])+
+                  eps_bear[bear[i]]+
+                  eps_year[yr[i]]
+                  
+ 
+  ## outcome (LMC = 2.5)
+  y[i]~dbin(p[i],1)
+  
+  } ## end likelihood
+  
+  ## Priors
+  
+  for(i in 1:Nbear){  ### begin individual random intercept loop
+  eps_bear[i]~dnorm(0,bear_tau)
+  } ### end individual random intercept loop
+  
+  for(i in 1:Nyr){  ### begin individual random intercept loop
+  eps_year[i]~dnorm(0,year_tau)
+  } ### end individual random intercept loop
+  
+  b0 ~ dt(0, pow(2.5, -2), 1)
+  bCORT ~ dt(0, pow(2.5, -2), 1)
+  bMP ~ dt(0, pow(2.5, -2), 1)
+  b15N ~ dt(0, pow(2.5, -2), 1)
+  b13C ~ dt(0, pow(2.5, -2), 1)
+  bLitSize ~ dt(0, pow(2.5, -2), 1)
+  bMatBC ~ dt(0, pow(2.5, -2), 1)
+  bAge ~ dt(0, pow(2.5, -2), 1)
+  bMBCxLS ~ dt(0, pow(2.5, -2), 1)
+  
+  
+  ## hyperpriors
+  
+  ### individual bear RI
+  bsigma ~ dunif(0,5)
+  bear_tau <- pow(bsigma,-2)
+  
+  ### year RI
+  ysigma ~ dunif(0,5)
+  year_tau <- pow(ysigma,-2)
+  
+  # GOF test
+
+for(i in 1:N){
+    presi[i] <- (y[i] - p[i]) / sqrt(p[i] * (1 - p[i]))
+    obs.new[i] ~ dbin(p[i], 1)
+    presi.new[i] <- (obs.new[i] - p[i]) / sqrt(p[i] * (1 - p[i]))
+    D[i] <- pow(presi[i], 2)
+    D.new[i] <- pow(presi.new[i], 2)
+  }
+  fit <- sum(D[])
+  fit.new <- sum(D.new[])
+
+  } # end model code
+  ",
+  file = "RIBinomMCmodel_MBC.txt"
+)
+
+```
+
+
+
+### Run model
+
+```{r}
+# create dummy variables for each yi to determine which parity they belong to
+MP <- as.numeric(DFbinom$statut=="M")
+# create variable to hold the model outcome (length of maternal care). length of 1.5 is more common, so I will let that be the reference and longer maternal care the effect
+y <- as.numeric(DFbinom$LMC=="2.5")
+# Dim all have same length
+N <- length(MP)
+
+bear <- as.factor(DFbinom$bearID)
+Nbear<-nlevels(bear)
+bear <- as.numeric(bear)
+print(bear)
+
+yr<-as.factor(DFbinom$year)
+yr<-as.numeric(yr)
+print(yr)
+
+
+ReBinomMC.MBCdata <- list(N=N, y=y, Zcort=Zcort, MP=MP,
+                           bear=bear,Nbear=Nbear, Z15N=Z15N, Z13C=Z13C,
+                           Zmatcond=Zmatcond,Zlitsize=Zlitsize, Zage=Zage,
+                          yr=yr, Nyr=Nyr)
+str(ReBinomMC.MBCdata)
+
+wanted.MBC <- c("b0","bCORT", "bMP", "b15N", "b13C", "bMatBC", "bLitSize",
+                "bAge", "bMBCxLS","p","bsigma","ysigma","fit",
+                "fit.new","residual","presi")
+
+
+ReJagsBinomMC.MBC <- jags(ReBinomMC.MBCdata,NULL,wanted.MBC,
+                    model="RIBinomMCmodel_MBC.txt",
+                    n.chains = 4,n.adapt = 5000,n.iter = 100000,
+                    n.burnin = 5000, n.thin = 20, DIC = TRUE,
+                    parallel = TRUE)
+
+
+```
+
+### Check convergence
+
+```{r}
+
+ReJagsBinomMC.MBC_output <- mcmcOutput(ReJagsBinomMC.MBC)
+
+J <- summary(ReJagsBinomMC.MBC_output)
+K <- as.data.frame(J[1:9,])
+print(K)
+
+write.csv(K,"LMC_MBCoutput.csv")
+
+diagPlot(ReJagsBinomMC.MBC_output)
+
+postPlot(ReJagsBinomMC.MBC_output)
+
+autocorr.diag(as.mcmc(ReJagsBinomMC.MBC_output))
+
+
+```
+
+### Goodness of fit testing
+
+```{r}
+
+fitstats <- MCMCpstr(ReJagsBinomMC.MBC, params = c("fit", "fit.new"), 
+                     type = "chains") 
+T.extreme <- fitstats$fit.new >= fitstats$fit
+(p.val <- mean(T.extreme))
+
+```
+
+
+### Model output
+
+```{r}
+MCMCsummary(ReJagsBinomMC.MBC, 
+            params = c("b0","bCORT", "bMP", "b15N", "b13C",
+                       "bMatBC", "bLitSize","bAge", "bMBCxLS"),
+            round = 3)
+```
+
+
+## Litter BC
+### Model structure
+
+LMC = b0+ b1 x Cortisol + b2 x N15 + b3 x C13 + b5 x LitterSize + b6 x LitterBC + b7 x age  +(1|BearID) + (1|year)
+
+
 
 ```{r}
 
@@ -485,54 +743,71 @@ cat(
   for(i in 1:N){  ##begin likelihood
   
   ## Predictors
-  logit(p[i]) <- b0[bear[i]]+
+  logit(p[i]) <- b0+
                   bCORT*Zcort[i]+
                   bMP*MP[i]+
                   b15N*Z15N[i]+
                   b13C*Z13C[i]+
-                  bMatBC*Zmatcond[i]+
                   bLitSize*Zlitsize[i]+
                   bLitBC*Zlitcond[i]+
-                  bAge*Zage[i]
+                  bAge*Zage[i]+
+                  eps_bear[bear[i]]+
+                  eps_year[yr[i]]
  
   ## outcome (LMC = 2.5)
   y[i]~dbern(p[i])
   
   } ## end likelihood
   
-  ## Priors
+  for(i in 1:Nbear){  ### begin individual random intercept loop
+  eps_bear[i]~dnorm(0,bear_tau)
+  } ### end individual random intercept loop
   
-  for(j in 1:Nbear){  ### begin random intercept loop
-    b0[j]~dnorm(mu,tau)
-  } ### end random intercept loop
+  for(i in 1:Nyr){  ### begin individual random intercept loop
+  eps_year[i]~dnorm(0,year_tau)
+  } ### end individual random intercept loop
   
-  bCORT ~ dunif(-5,5)
-  bMP ~ dunif(-5,5)
-  b15N ~ dunif(-5,5)
-  b13C ~ dunif(-5,5)
-  bMatBC ~ dunif(-5,5)
-  bLitSize ~ dunif(-5,5)
-  bLitBC ~ dunif(-5,5)
-  bAge ~ dunif(-5,5)
-
+  b0 ~ dt(0, pow(2.5, -2), 1)
+  bCORT ~ dt(0, pow(2.5, -2), 1)
+  bMP ~ dt(0, pow(2.5, -2), 1)
+  b15N ~ dt(0, pow(2.5, -2), 1)
+  b13C ~ dt(0, pow(2.5, -2), 1)
+  bLitSize ~ dt(0, pow(2.5, -2), 1)
+  bLitBC ~ dt(0, pow(2.5, -2), 1)
+  bAge ~ dt(0, pow(2.5, -2), 1)
+  
   
   ## hyperpriors
   
-  pMean ~ dbeta(1,1)
-  mu <- logit(pMean)
-  sigma ~ dunif(0, 5)
-  tau <- 1/sigma^2
+  ### individual bear RI
+  bsigma ~ dunif(0,5)
+  bear_tau <- pow(bsigma,-2)
   
+  ### year RI
+  ysigma ~ dunif(0,5)
+  year_tau <- pow(ysigma,-2)
+
+# GOF test
+
+for(i in 1:N){
+    presi[i] <- (y[i] - p[i]) / sqrt(p[i] * (1 - p[i]))
+    obs.new[i] ~ dbin(p[i], 1)
+    presi.new[i] <- (obs.new[i] - p[i]) / sqrt(p[i] * (1 - p[i]))
+    D[i] <- pow(presi[i], 2)
+    D.new[i] <- pow(presi.new[i], 2)
+  }
+  fit <- sum(D[])
+  fit.new <- sum(D.new[])
   
   } # end model code
   ",
-  file = "ReBinomMCmodel_Full.txt"
+  file = "ReBinomMCmodel_LBC.txt"
 )
 
 ```
 
 
-### Run and check model
+#### Run model
 
 ```{r}
 # create dummy variables for each yi to determine which parity they belong to
@@ -548,58 +823,62 @@ bear <- as.numeric(bear)
 sort(bear)
 
 
-ReBinomMC.Fulldata <- list(N=N, y=y,Zcort=Zcort,MP=MP, Nbear=Nbear,
-                           bear=bear,Z15N=Z15N, Z13C=Z13C, Zmatcond=Zmatcond,
-                           Zlitsize=Zlitsize, Zlitcond=Zlitcond, Zage=Zage)
-str(ReBinomMC.Fulldata)
+ReBinomMC.LBCdata <- list(N=N, y=y,Zcort=Zcort,MP=MP, Nbear=Nbear,
+                          bear=bear,Z15N=Z15N, Z13C=Z13C, Zlitsize=Zlitsize,
+                          Zlitcond=Zlitcond, Zage=Zage, Nyr=Nyr, yr=yr)
+str(ReBinomMC.LBCdata)
 
-wanted.Full <- c("bCORT", "bMP", "b15N", "b13C", "bMatBC", "bLitSize",
-            "bLitBC", "bAge", "bMBCxLS","pMean", "mu", "sigma", "b0")
+wanted.LBC <- c("bCORT", "bMP", "b15N", "b13C", "bLitSize",
+            "bLitBC","bAge","bsigma","ysigma","b0","p","fit",
+            "fit.new","residual","presi")
 
-inits <- function(){
-  list(
-  b0=rnorm(1,-2,2),
-  b1=rnorm(0,-2,2),
-  b2=rnorm(1,-2,2)
-  )
-}
 
-ReJagsBinomMC.Full <- jags(ReBinomMC.Fulldata,NULL,wanted.Full,
-                    model="ReBinomMCmodel_Full.txt",
-                    n.chains = 4,n.adapt = 50000,n.iter = 1000000,
-                    n.burnin = 50000, n.thin = 50, DIC = TRUE,
+ReJagsBinomMC.LBC <- jags(ReBinomMC.LBCdata,NULL,wanted.LBC,
+                    model="ReBinomMCmodel_LBC.txt",
+                    n.chains = 4,n.adapt = 5000,n.iter = 100000,
+                    n.burnin = 5000, n.thin = 20, DIC = TRUE,
                     parallel = TRUE)
 
 
 ```
 
-### Check convergence
+#### Check convergence
 
 ```{r}
 
-ReJagsBinomMC.Full_output <- mcmcOutput(ReJagsBinomMC.Full)
+ReJagsBinomMC.LBC_output <- mcmcOutput(ReJagsBinomMC.LBC)
 
-J <- summary(ReJagsBinomMC.Full_output)
+J <- summary(ReJagsBinomMC.LBC_output)
 K <- as.data.frame(J[1:9,])
 print(K)
 
-write.csv(K,"LMC_JagsFullModelOutput.csv")
+write.csv(K,"LMC_LBCoutput.csv")
 
-Test <- read.csv("LMC_JagsFullModelOutput.csv")
+diagPlot(ReJagsBinomMC.LBC_output)
 
-diagPlot(ReJagsBinomMC.Full_output)
+postPlot(ReJagsBinomMC.LBC_output)
 
-postPlot(ReJagsBinomMC.Full_output)
+autocorr.diag(as.mcmc(ReJagsBinomMC.LBC_output))
 
-autocorr.diag(as.mcmc(ReJagsBinomMC.Full_output))
 
+```
+
+
+### Goodness of fit testing
+
+```{r}
+
+fitstats <- MCMCpstr(ReJagsBinomMC.LBC, params = c("fit", "fit.new"), 
+                     type = "chains") 
+T.extreme <- fitstats$fit.new >= fitstats$fit
+(p.val <- mean(T.extreme))
 
 ```
 
 
 
 
-## Specifying the reduced model
+# Specifying the reduced model
 
 After running the full model and looking at the output, the only parameters with moderate or greater support was the effect of d15N, maternal body condition, and bear age. I chose to retain the variables and run a reduced model whose output would be less messy:
 
@@ -842,221 +1121,11 @@ ggplot(data = New.Dat, aes(MBC,LMCmbc))+
   xlab("Female Body Condition")+
   mytheme
 
-
-
-
 ```
 
 
 
 
 
-
-
-## Multinomial Maternal Care Model
-
-### Data Prep
-Below is my first attempt to write a multinomial logistic regression in JAGS to model one continuous (cort) and one categorical (parity) variable on the probability of a female spending 1.5 years with cubs vs. 2.5 years with cubs vs. lost litters
-
-```{r}
-
-## Step 1. Data setup
-### input values. Note below I avoid using the Primiparous (P)category because it is our reference level and the constant absorbs the reference
-
-# here we create dummy variables for each yi to determine which parity they belong to
-r1 <- as.numeric(MatCare$statut=="P")
-r2 <- as.numeric(MatCare$statut=="M")
-Zcort <- standardize(MatCare$cort)
-
-# Here I create variables to hold the model outcome variables (length of maternal care)
-o1 <- as.numeric(MatCare$weaningage=="1.5")
-o2 <- as.numeric(MatCare$weaningage=="2.5")
-o3 <- as.numeric(MatCare$weaningage=="litterloss")
-
-# Dim all have same length
-N <- length(r2)
-
-
-```
-
-### Model Specification
-
-```{r}
-
-cat(
-  "
-  model{  # Open bracket1
-  for(i in 1:N){  ##open bracket2
-  ## outcome levels 2 and 3 (2.5 and litterloss)
-  o1[i]~dbern(pi1[i])
-  o2[i]~dbern(pi2[1])
-  o3[i]~dbern(pi3[i])
-  
-  ## Predictors
-  logit(pi1[i]) <- b0+b1*Zcort[i]+b2*r2[i]
-  logit(pi2[i]) <- b0+b1*Zcort[i]+b2*r2[i]
-  logit(pi3[i]) <- b0+b1*Zcort[i]+b2*r2[i]
-  } ## closed bracket 2
-  
-  ## Priors
-  b0~dnorm(0,0.001)
-  b1~dnorm(0,0.001)
-  b2~dnorm(0,0.001)
-  } #closed bracket1
-  ",
-  file = "BasicMCmodel.txt"
-)
-
-cat()
-
-```
-
-### Fit model, check convergence, and save output
-
-Below I run and fit the JAGS model
-
-```{r}
-
-BasicMC.data <- list("r2"=r2,"o1"=o1,"o2"=o2,"o3"=o3,"Zcort"=Zcort,"N"=N)
-str(BasicMC.data)
-
-wanted <- c("b0","b1","b2")
-
-inits <- function(){
-  list(
-  b0=rnorm(1,-2,2),
-  b1=rnorm(0,-2,2),
-  b2=rnorm(1,-2,2)
-  )
-}
-
-JagsBasicMC <- jags(BasicMC.data,NULL,wanted,
-                    model="BasicMCmodel.txt",
-                    n.chains = 4,n.adapt = 2000,n.iter = 5000,
-                    n.burnin = 1000, n.thin = 5, DIC = TRUE,
-                    parallel = TRUE)
-
-
-```
-
-And below I check convergence
-
-
-```{r}
-
-##### Check convergence
-JagsBasicMC_output <- mcmcOutput(JagsBasicMC)
-
-summary(JagsBasicMC_output)
-
-diagPlot(JagsBasicMC_output)
-
-postPlot(JagsBasicMC_output)
-
-
-```
-
-
-## Adding Random effect of bearID to model
-
-There are several bears for which we have repeated measures and the number of repeated measures for each bear varies from 1 to 8 repeated measures. This data set contains 152 records for only 67 individual female bears.
-
-```{r}
-
-table(MatCare$bearID)
-
-bear <- as.factor(MatCare$bearID)
-print(Nbear)
-Nbear <- nlevels(bear)
-bear <- as.numeric(bear)
-sort(bear)
-print(bear)
-
-
-```
-
-
-### BearID RE model
-```{r}
-cat(
-  "
-  model{  # Begin Model code
-  # Likelihood
-  for(i in 1:N){  ## begin likelihood loop
-  
-  ## Predictors
-  logit(pi2[i]) <- b0[bear[i]]+b1*Zcort[i]+b2*r2[i]
-  logit(pi3[i]) <- b0[bear[i]]+b1*Zcort[i]+b2*r2[i]
-  
-  ## outcome levels 2 and 3 (2.5 and litterloss)
-  o2[i]~dbern(pi2[1])
-  o3[i]~dbern(pi3[i])
-  
-  } ## end likelihood loop
-  
-  ## Priors
-  
-  for(j in 1:Nbear){  ### begin random intercept loop
-  b0[j]~dnorm(mu,tau)
-  } ### end random intercept loop
-  
-  b1~dnorm(0,0.001)
-  b2~dnorm(0,0.001)
-  
-  ## hyperpriors
-  pMean ~ dbeta(1,1)
-  mu <- logit(pMean)
-  sigma ~ dunif(0,5)
-  tau <- 1/sigma^2
-  } # end model code
-  ",
-  file = "BasicMCmodel_BearID.txt"
-)
-
-
-```
-
-### Fit model, check convergence, and save output
-
-```{r}
-
-ReBasicMC.data <- list("N"=N,"o2"=o2,"o3"=o3,"Zcort"=Zcort,"r2"=r2,
-                       "Nbear"=Nbear,"bear"=bear)
-str(ReBasicMC.data)
-
-REwanted <- c("b0","b1","b2", "mu", "sigma")
-
-inits <- function(){
-  list(
-  b0=rnorm(1,-2,2),
-  b1=rnorm(0,-2,2),
-  b2=rnorm(1,-2,2)
-  )
-}
-
-ReJagsBasicMC <- jags(ReBasicMC.data,NULL,REwanted,
-                    model="BasicMCmodel_BearID.txt",
-                    n.chains = 4,n.adapt = 2000,n.iter = 5000,
-                    n.burnin = 1000, n.thin = 5,
-                    parallel = TRUE)
-
-
-```
-
-check convergence
-
-```{r}
-
-##### Check convergence
-ReJagsBasicMC_output <- mcmcOutput(ReJagsBasicMC)
-
-summary(ReJagsBasicMC_output)
-
-diagPlot(ReJagsBasicMC_output)
-
-postPlot(ReJagsBasicMC_output)
-
-
-```
 
 

@@ -16,7 +16,7 @@ knitr::opts_chunk$set(echo = TRUE)
  
  There is a physiological difference between females with offspring, females newly seperated from offspring, and females who failed to reproduce detectable in brown bear hair.
 
-Cortisol is known to interfere with important reproductive hormones, such as progesterone and testosterone, as well as indicate the overall metabolic demand or "stress" and individual is under. Bears under severe metabolic demands should be less likely to implant embryos and miss years of reproduction. Females may alter how long they remain with their cubs based on energetic demands and life-history trade-offs. Offspring that are developmentally delayed or females who are not yet ready to reproduce again may delay family seperation to give themselves or their offspring another year of development. Alternitively, because brown bears are long lived, they may favor future reproduction over at the cost of current reproduction. Bears under greater metabolic demands may be more likely to forage in high reward but risky areas near male bears to replenish their own body condition at the cost of increased infanticide risk.  
+Cortisol is known to interfere with important reproductive hormones, such as progesterone and testosterone, as well as indicate the overall metabolic demand or "stress" and individual is under. Bears under severe metabolic demands should be less likely to implant embryos and miss years of reproduction. Females may alter how long they remain with their cubs based on energetic demands and life-history trade-offs. Offspring that are developmentally delayed or females who are not yet ready to reproduce again may delay family separation to give themselves or their offspring another year of development. Alternatively, because brown bears are long lived, they may favor future reproduction over at the cost of current reproduction. Bears under greater metabolic demands may be more likely to forage in high reward but risky areas near male bears to replenish their own body condition at the cost of increased infanticide risk.  
  
  The underlying model for this hypothesis is as follows:
  
@@ -63,25 +63,35 @@ I expect cortisol to vary annually with many unmeasured environmental variables.
 
 Because I have repeated measures on bears, I expect cortisol across years to be more similar within the same bear than between bears. However, I do expect the above covariates to affect the cortisol of the same bear sampled over many years.
 
+### Interactions
+
+Do I expect interactions between my covariates?
+
+I expect body condition could interact with several things and make my life really complicated. 
+
+For instance, I would expect cortisol to increase with litter size related to the energetic demands of producing and caring for more cubs. However, between bears with the same litter size in the same year, I would expect the bear in better condition to have lower cortisol. 
+
+There could also be an interaction between length of maternal care and maternal body condition. A female in good condition may produce and care for cubs well so that they are large enough to gain independence at 1.5 years and maintain relatively low cortisol while a female in poor condition may reproduce and then be forced to part with her cubs because she cannot not sustain care, resulting in relatively high cortisol
+
 
 # Data exploration and prep
 
 ## load data and packages
 
 ```{r}
-
+rm(list=ls())
 setwd("~/Rprojects/Diet-and-reproduction-in-rown-bears/Hypothesis2")
-HP2.dat <- read.csv("BearReproData_H2Analysis.csv")
 
-Cort.Repro <- HP2.dat[,c(1,3,6,10,11,12,13,14,15,16,22,23,26,28)]
-Cort.Repro <- subset(Cort.Repro, reprocat!="Wmother")
 
 library(ggplot2)
 library(GGally)
 library(wiqid)
 library(jagsUI)
-
-colSums(is.na(Cort.Repro))
+library(rjags)
+library(viridis)
+library(MCMCvis) # for summarizing MCMC output
+library(mcmcplots) # for plotting MCMC output
+library(patchwork) # for multi-panel plots
 
 mytheme <- theme(
     axis.text = element_text(size = 18,face = "bold"),
@@ -92,6 +102,16 @@ mytheme <- theme(
     axis.line = element_line(colour = "black",size = 1),
     axis.ticks = element_line(size = 1),
     )
+theme_set(mytheme)
+
+HP2.dat <- read.csv("BearReproData_H2Analysis.csv")
+
+Cort.Repro <- HP2.dat[,c(1,3,6,10,11,12,13,14,15,16,22,23,26,28)]
+Cort.Repro <- subset(Cort.Repro, reprocat!="Wmother")
+
+
+
+colSums(is.na(Cort.Repro))
 
 ```
 
@@ -101,15 +121,15 @@ Litter CORT and litter condition are missing too many records to include, but di
 
 ```{r}
 
-side.bar <- HP2.dat[,c(1,3,6,10,11,12,13,14,15,16,22,23,26,28,29,30)]
-side.bar <- subset(Cort.Repro, reprocat!="Wmother")
-side.bar <- subset(side.bar,littercort!="NA")
+#side.bar <- HP2.dat[,c(1,3,6,10,11,12,13,14,15,16,22,23,26,28,29,30)]
+#side.bar <- subset(Cort.Repro, reprocat!="Wmother")
+#side.bar <- subset(side.bar,littercort!="NA")
 
-SB.NumVar <- side.bar[,c(2,3,5,11,12,13,14,15,16)]
+#SB.NumVar <- side.bar[,c(2,3,5,11,12,13,14,15,16)]
 
-pairs(SB.NumVar)
+#pairs(SB.NumVar)
 
-ggpairs(SB.NumVar)
+#ggpairs(SB.NumVar)
 
 
 ```
@@ -137,18 +157,18 @@ corrplot::corrplot(res)
 
 # year and Cort are pretty correlated
 ggplot(data = Cort.Repro, aes(year, cort))+
-  geom_point()+
+  geom_jitter(width = 0.2)+
   mytheme
 ## Cort is increasing through the years, but it is also becoming more variable
 
 # Age and condition are moderately correlated, unsurprisingly
 ggplot(data = Cort.Repro, aes(age, condition))+
-  geom_point()+
+  geom_jitter(width = 0.2)+
   mytheme
 
 ```
 
-No covariates are so correlated that they cannot be included in the same model
+Cubs first count or litter size is highly correlated with age (0.68). Age is also moderately correlated with age (0.53). I will need to build separate models to compare the strength of each of these as an independent variable and determine how to move forward.
 
 
 ### Ceveland Dot plots
@@ -242,7 +262,8 @@ I did not see anything in the Cleveland dotplots that has me concerned about uni
 
 ggplot(data = Cort.Repro, aes(ILI, cort))+
   geom_jitter(width = 0.1)+
-  geom_boxplot(aes(group=ILI), alpha=0.4)
+  geom_boxplot(aes(group=ILI), alpha=0.4)+
+  mytheme
 
 ```
 It might be interesting to compare females who we know eventually reproduced (the BP category) and those who we have no known reproduction for (NKR)
@@ -280,24 +301,172 @@ Cort.Repro$Zcort <- standardize(Cort.Repro$cort)
 ```
 
 
-# Univariate models
+# Non-linear covariate determination
 
 Before I build a full model, I need to address the two variables that I hypothesized could take various shapes. To do this, I will compare simple models with only the effect of interest, determine which covariate has the best support, and then include that covariate in the full model.
 
-
-
 ### d15N
+
+For dN15, I hypothesized that this relationship could be linear, quadratic, or log-linear. Therefore I will test these models against one another and against the intercept only model
 
 ```{r}
 
-# create variable to hold the model outcome (Cortisol).
-y <- Cort.Repro$cort
+library(lme4)
+library(MuMIn)
 
-# Dim all have same length
-N <- length(y)
+CORTint<- lmer(cort ~1+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               REML = FALSE)
+INTaic<-AICc(CORTint)
 
-Zd15N <- Cort.Repro$Zd15N
 
+Lin15N<- lmer(cort ~Zd15N+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               REML = FALSE)
+Lin15Naic<-AICc(Lin15N)
+summary(Lin15N)
+
+
+Quad15N<- lmer(cort ~Zd15N+Zd15Nsq+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               REML = FALSE)
+Quad15Naic<-AICc(Quad15N)
+
+
+Ln15N<- lmer(cort ~Zd15Nln+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               REML = FALSE)
+Ln15Naic<-AICc(Ln15N)
+
+
+summary(Lin15N)
+summary(Ln15N)
+
+```
+
+Based on the AIcc values and deviance in the models, the linear relationship was the best d15N covariate, although it was only slightly better than the log-linear predictor (1442.0 vs 1442.1).
+
+
+### Condition
+
+```{r}
+
+Lincond<- lmer(cort ~condition+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               REML = FALSE)
+Lincondaic<-AICc(Lincond)
+
+Quadcond<- lmer(cort ~condition+conditionsq+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               REML = FALSE)
+Quadcondaic<-AICc(Quadcond)
+
+summary(Quadcond)
+
+PredCort<- function(x){
+  -8.274+(20.749*x)+(-7.226*x^2)
+}
+min(Cort.Repro$condition)
+max(Cort.Repro$condition)
+
+NewCond<- seq(0.6,2.2,0.02)
+
+NewCort<-PredCort(NewCond)
+
+DAT<-cbind.data.frame(NewCond,NewCort)
+
+ggplot(data = DAT, aes(NewCond,NewCort))+
+  geom_line()
+ggplot(data = Cort.Repro, aes(condition,cort))+
+  geom_jitter(width = 0.01, size=1.5, alpha=0.4, height = 0.4)+
+  mytheme
+
+```
+
+In this case, the quadratic relationship performed much better than the linear relationship, and therefore this will be the relationship included in the full model.
+
+# Testing correlated covariates
+Above I determined that age was highly correlated with litter size and also with body condition. Like my methods above, I am going to model each of these and compare their power to explain deviance in the cortisol data. If there is no or weak support in the data for an effect (CIs that largely overlap zero and AICc values greater than intercept only model), I will exclude them from further modelling. If there is strong support for an effect in the data, I will retain them and build seperate models to accomidate their colinearity and use the results of both models to draw inference.
+
+## Age
+
+I forgot to address this above, but as I was getting ready to model this, it occurred to me that this is another case where I will also need to test for non-linear relatonships. It doesn't really make physiological sense for cortisol to continuously increase through life. It seems more likely that it may increase and then decrease in a quadratic relationship or increase to a certain age and then plateau.
+```{r}
+###########
+# Age
+Cort.Repro$age2<-Cort.Repro$age^2
+Cort.Repro$ageln<-log(Cort.Repro$age)
+Linagelm<- lmer(cort ~age+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               REML = FALSE)
+Linageaic<-AICc(Linagelm)
+summary(Linagelm)
+
+Quadagelm<- lmer(cort ~age+age2+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               REML = FALSE)
+Quadageaic<-AICc(Quadagelm)
+summary(Quadagelm)
+
+lnagelm<- lmer(cort ~ageln+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               REML = FALSE)
+lnageaic<-AICc(lnagelm)
+summary(Quadagelm)
+
+### The quadratic relationship had the most support 
+
+CortAge<-function(x){
+  3.03+(0.77*x)+(-0.03*x^2)
+}
+age<-seq(1,20,1)
+pred.cort<-CortAge(age)
+DF<-data.frame(cbind(age,pred.cort))
+ggplot(data = DF, aes(age,pred.cort))+
+  geom_line(lwd=1.2)+
+  scale_y_continuous(expand = c(0,0),
+                     limits = c(0,9))+
+  scale_x_continuous(expand=c(0,0),
+                     limits = c(1,21.1),
+                     breaks = seq(1,21,5))
+```
+
+
+## Litter size
+
+```{r}
+
+Littsizlm<- lmer(cort ~cubsfirstcount+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               REML = FALSE)
+Littsizaic<-AICc(Littsizlm)
+summary(Littsizlm)
+
+```
+There is strong evidence for a linear effect of litter size on cortisol. Because litter size and body condition are not strongly correlated (0.5) these two can and will be modeled together 
+
+## Body condition
+As noted above, I already know that the quadratic of condition is the best predictor. Both variables have a quadratic relationship, but the strength of age is much greater than the strength of body condition. However, because there is evidence for both, I will need to use separate models to model their effects.
+
+# Inference Modeling
+
+cortisol = b0+ b1 x parity+ b2 x d15N+ b3 x d13C+ 
+b4 x body cond+ b5x body cond^2+  b6 x ILI+ b7 x litter size+ b8 x length of care+ b9 x proportion diet+ 
+b10 x (body cond x litter size)+ b11 x (cond x LMC)+ 
+(1|BearID)+ (1|year)
+
+cortisol = b0+ b1 x parity+ b2 x d15N+ b3 x d13C+ 
+b4 x age+ b5x age^2+  b6 x ILI+ b7 x length of care+ b8 x proportion diet+ (1|BearID)+ (1|year)
+  
+
+To keep my head straight through this process, I am going to use the build up strategy that I used in my master's research and establish that all models greater than the intercept are worth retaining and carrying over into the next modeling step. I will begin with uni variate models (which I will include condition in, even though that technically has two terms). All covariates with a log likelihood greater than the intercept will carried into bi-variate models and so on. the final model list will include all models with likelihoods greater than the intercept only model, the intercept only model, and the full model. I will use this full model list to draw multi-modal inference. 
+ 
+Note: This process may change later to simplify results or inferences.
+
+## Step 0: random effects
+
+
+```{r}
 table(Cort.Repro$bearID)
 
 bear <- as.factor(Cort.Repro$bearID)
@@ -305,55 +474,287 @@ Nbear <- nlevels(bear)
 bear <- as.numeric(bear)
 sort(bear)
 
-# So this dataset has 273 records of 94 different individuals whose captures range from 1 to 11
+table(Cort.Repro$year)
+yr<-as.factor(Cort.Repro$year)
+Nyr<-nlevels(year)
+yr<-as.numeric(yr)
+sort(yr)
 
+```
 
-### Linear model
+### Intercept only model
+
+#### Model code
+
+```{r}
+
 cat(
   "
   model{  # begin model code
   
   for(i in 1:N){  ##begin likelihood
   
-  ## Predictors
-  mu[i] <- b0[bear[i]]+b1*Zd15N[i]
- 
-  ## outcome
-  y[i]~dnorm(mu1[i],tau1)
-  
+  ## likelihood
+  cort[i]~ dnorm(mu[i],tau)
+  mu[i] <- b0+eps_bear[bear[i]]+eps_year[yr[i]]
+       
   } ## end likelihood
   
   ## Priors
   
-  for(j in 1:Nbear){  ### begin random intercept loop
-  b0[j]~dnorm(mu2,tau2)
-  } ### end random intercept loop
+  b0 ~ dnorm(0,0.001)
+  sigma ~ dunif(0, 100)
   
-  b1 ~ dnorm(0,0.01)
+  for(i in 1:Nbear){  ### begin individual random intercept loop
+  eps_bear[i]~dnorm(0,bear_tau)
+  } ### end individual random intercept loop
   
-  ## hyperpriors
-  pMean ~ dbeta(1,1)
-  mu1 <- logit()
-  mu2 <- logit(pMean)
-  sigma ~ dunif(0,10)
-  tau <- 1/sigma^2
+  for(i in 1:Nyr){  ### begin individual random intercept loop
+  eps_year[i]~dnorm(0,year_tau)
+  } ### end individual random intercept loop
   
-  } # end model code
+    ## hyperpriors
+  
+  ### individual bear RI
+  bsigma ~ dunif(0,5)
+  bear_tau <- pow(bsigma,-2)
+  
+  ### year RI
+  ysigma ~ dunif(0,5)
+  year_tau <- pow(ysigma,-2)
+  
+  # derived quantities
+  tau<-1/sigma^2
+  
+
+
+# Assess model fit using a sums-of-squares-type discrepancy
+ for (i in 1:N) { ### begin assesment loop
+ 
+    residual[i] <- cort[i]-mu[i]  # Residuals for observed data
+    sq[i] <- pow(residual[i], 2)  # Sq. resids for observed data
+
+# Generate replicate data and compute fit stats for them
+    y.new[i] ~ dnorm(mu[i], tau) # new data set at each MCMC iteration
+    sq.new[i] <- pow(y.new[i]-mu[i], 2)  # Squared residuals for new data
+    
+ } ### end assesmnet loop
+ 
+ fit <- sum(sq[])           # Sum of squared residuals for actual data set
+ fit.new <- sum(sq.new[])       # Sum of squared residuals for new data set
+ 
+} # end model code
+  
+  
   ",
-  file = "Hyp2_LINd15N.txt"
+  file = "Hyp2_IntOnly.txt"
 )
 
-LINd15N.data <- list(N=N, y=y, bear=bear, Nbear=Nbear, Zd15N=Zd15N)
-str(LINd15N.data)
+```
 
-wanted <- c("b0","b1","pMean","mu","sigma","tau")
+#### Fit model
+Next I fit the model in JAGS, check for convergence, and save output
 
+```{r}
+N<-length(Cort.Repro$cort)
+y<-Cort.Repro$cort
+table(Cort.Repro$bearID)
 
-JagsHyp2LINd15N <- jags(LINd15N.data,NULL,wanted,
-                    model="Hyp2_LINd15N.txt",
-                    n.chains = 4,n.adapt = 2000,n.iter = 10000,
-                    n.burnin = 2000, n.thin = 10, DIC = TRUE,
+bear <- as.factor(Cort.Repro$bearID)
+Nbear <- nlevels(bear)
+bear <- as.numeric(bear)
+sort(bear)
+
+table(Cort.Repro$year)
+
+yr <- as.factor(Cort.Repro$year)
+Nyr <- nlevels(yr)
+yr <- as.numeric(yr)
+
+Hyp2.Int.data <- list(N=N, y=y, bear=bear, Nbear=Nbear, yr=yr, Nyr=Nyr)
+str(Hyp2.Int.data)
+
+wanted <- c("b0","bsigma","ysigma", "sigma", "mu", "y.new", 
+            "fit", "fit.new", "residual")
+
+Hyp2.Int <- jags(Hyp2.Int.data,NULL,wanted,
+                    model="Hyp2_IntOnly.txt",
+                    n.chains = 4,n.adapt = 5000,n.iter = 100000,
+                    n.burnin = 20000, n.thin = 20, DIC = TRUE,
                     parallel = TRUE)
+
+```
+
+#### Check convergence
+
+```{r}
+
+Hyp2.Int_output <- mcmcOutput(Hyp2.Int)
+
+diagPlot(Hyp2.Int_output)
+
+postPlot(Hyp2.Int_output)
+
+autocorr.diag(as.mcmc(Hyp2.Int_output))
+
+MCMCsummary(Hyp2.Int, params = c("b0", "sigma","bsigma","ysigma"))
+
+J <- summary(Hyp2.Int_output)
+K <- as.data.frame(J[1:9,])
+print(K)
+
+write.csv(K,"Hyp2_Int.csv")
+
+```
+
+## Step 1: Univariate models
+
+### dN15
+mu[i] = b0+ b1 x dN15
+y[i]~normal(mu[i], sigma) NOTE: In reality y[i] has a gamma distribution, but I need to work that out later
+
+
+#### Model code
+```{r}
+
+cat(
+  "
+  model{  # begin model code
+  
+  for(i in 1:N){  ##begin likelihood
+  
+  ## likelihood
+  cort[i]~ dnorm(mu[i],tau)
+  mu[i] <- b0+
+    b15N*Zd15N[i]+
+    eps_bear[bear[i]]+
+    eps_year[yr[i]]
+       
+  } ## end likelihood
+  
+  ## Priors
+  
+  b0 ~ dunif(-5,5)
+  b15N ~ dunif(-5,5)
+  sigma ~ dunif(0, 100)
+  
+  for(i in 1:Nbear){  ### begin individual random intercept loop
+  eps_bear[i]~dnorm(0,bear_tau)
+  } ### end individual random intercept loop
+  
+  for(i in 1:Nyr){  ### begin individual random intercept loop
+  eps_year[i]~dnorm(0,year_tau)
+  } ### end individual random intercept loop
+  
+    ## hyperpriors
+  
+  ### individual bear RI
+  bsigma ~ dunif(0,5)
+  bear_tau <- pow(bsigma,-2)
+  
+  ### year RI
+  ysigma ~ dunif(0,5)
+  year_tau <- pow(ysigma,-2)
+  
+  # derived quantities
+  tau<-1/sigma^2
+  
+
+
+# Assess model fit using a sums-of-squares-type discrepancy
+ for (i in 1:N) { ### begin assesment loop
+ 
+    residual[i] <- cort[i]-mu[i]  # Residuals for observed data
+    sq[i] <- pow(residual[i], 2)  # Sq. resids for observed data
+
+# Generate replicate data and compute fit stats for them
+    y.new[i] ~ dnorm(mu[i], tau) # new data set at each MCMC iteration
+    sq.new[i] <- pow(y.new[i]-mu[i], 2)  # Squared residuals for new data
+    
+ } ### end assesmnet loop
+ 
+ fit <- sum(sq[])           # Sum of squared residuals for actual data set
+ fit.new <- sum(sq.new[])       # Sum of squared residuals for new data set
+ 
+} # end model code
+  
+  
+  ",
+  file = "Hyp2_d15N.txt"
+)
+
+```
+
+#### Package and run
+
+```{r}
+
+N<-length(Cort.Repro$cort)
+y<-Cort.Repro$cort
+Zd15N <- Cort.Repro$Zd15N
+
+Hyp2.N15.data <- list(N=N, y=y, bear=bear, Nbear=Nbear, yr=yr, Nyr=Nyr,
+                      Zd15N=Zd15N)
+str(Hyp2.N15.data)
+
+wanted <- c("b0","b15N","bsigma","ysigma", "sigma", "mu", "y.new", 
+            "fit", "fit.new", "residual")
+
+Hyp2.d15N <- jags(Hyp2.N15.data,NULL,wanted,
+                    model="Hyp2_d15N.txt",
+                    n.chains = 4,n.adapt = 50000,n.iter = 1000000,
+                    n.burnin = 50000, n.thin = 20, DIC = FALSE,
+                    parallel = TRUE)
+
+```
+
+#### Check convergence
+
+```{r}
+
+Hyp2.d15N_output <- mcmcOutput(Hyp2.d15N)
+
+diagPlot(Hyp2.d15N_output)
+
+postPlot(Hyp2.d15N_output)
+
+autocorr.diag(as.mcmc(Hyp2.d15N_output))
+
+
+MCMCsummary(Hyp2.d15N, params = c("b0","b15N", "sigma","bsigma","ysigma"))
+
+J <- summary(Hyp2.d15N_output)
+K <- as.data.frame(J[1:9,])
+print(K)
+
+write.csv(K,"Hyp2_d15N.csv")
+
+```
+
+#### Testing Model assumptions
+
+```{r}
+
+lmresids <- MCMCpstr(Hyp2.d15N, params = "residual", func = mean)
+lmfitted <- MCMCpstr(Hyp2.d15N, params = "mu", func = mean)
+jagslmfit <- data.frame(resid = lmresids$residual, fitted = lmfitted$mu)
+jagslmfit$std.abs.resid <- sqrt(abs(jagslmfit$resid/sd(jagslmfit$resid)))
+
+p1 <- ggplot(jagslmfit, aes(fitted, resid)) + geom_point() + 
+         geom_hline(yintercept = 0) + geom_smooth()
+p2 <- ggplot(jagslmfit, aes(sample = resid)) + stat_qq() + stat_qq_line()
+p3 <- ggplot(jagslmfit, aes(fitted, std.abs.resid)) + geom_point() + 
+         geom_smooth() + ylab("sqrt(|Standardized Residuals|)")
+p1 + p2 + p3
+
+```
+
+
+#### Goodness of fit test
+```{r}
+fitstats <- MCMCpstr(Hyp2.d15N, params = c("fit", "fit.new"), type = "chains") 
+T.extreme <- fitstats$fit.new >= fitstats$fit
+(p.val <- mean(T.extreme))
 
 
 ```
