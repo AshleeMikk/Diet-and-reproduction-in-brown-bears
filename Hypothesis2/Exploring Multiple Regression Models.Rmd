@@ -1,0 +1,144 @@
+---
+title: "Exploring Multiple Regression Models"
+author: "Ashlee Mikkelsen"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+rm(list=ls())
+setwd("~/Rprojects/Diet-and-reproduction-in-rown-bears/Hypothesis2")
+
+
+library(ggplot2)
+library(GGally)
+library(wiqid)
+library(jagsUI)
+library(rjags)
+library(viridis)
+library(MCMCvis) # for summarizing MCMC output
+library(mcmcplots) # for plotting MCMC output
+library(patchwork) # for multi-panel plots
+
+mytheme <- theme(
+    axis.text = element_text(size = 18,face = "bold"),
+    axis.title = element_text(size = 20, face = "bold"),
+    panel.grid.major = element_line(color = "grey92"),
+    panel.grid.minor = element_line(color = "grey96"),
+    panel.background = element_rect(fill = "white"),
+    axis.line = element_line(colour = "black",size = 1),
+    axis.ticks = element_line(size = 1),
+    )
+theme_set(mytheme)
+
+HP2.dat <- read.csv("BearReproData_H2Analysis.csv")
+
+Cort.Repro <- HP2.dat[,c(1,3,6,10,11,12,13,14,15,16,22,23,26,28)]
+Cort.Repro <- subset(Cort.Repro, reprocat!="Wmother")
+Cort.Repro$conditionsq <- Cort.Repro$condition^2
+Cort.Repro$age2<-Cort.Repro$age^2
+
+colSums(is.na(Cort.Repro))
+
+ggplot(data = Cort.Repro, aes(cort))+
+  geom_histogram(binwidth = sd(Cort.Repro$cort)*0.5)
+
+```
+# Introduction
+
+So, initial modeling did not got weel. I found a lot of really neat correlations in my data through checking colinearity prior to building and analyzing models, but it was very difficult to find variables that could be included in a model and it was difficult to get models to converge.
+
+In doing some of the research for the pace of life paper Anne and I are planning, I came across several methods of multiple regression that sound like they would be a nice alternative to typical linear regression. So below, I start a journey to fins a better way to analyze this complex dataset.
+
+## Partial Least squares
+
+I begin by following along with a tutorial from statology. org (https://www.statology.org/partial-least-squares-in-r/) that goes through the basics of performing a partial least squares regression. They use the cars data in package mtcars, but I am using the bear data
+
+### Step 1: Load packages
+
+```{r}
+library(pls)
+
+```
+
+
+### step 2: Fit PLS
+
+I will use cortisol values as the response variable and predictor varaibles as described by my linear regression model:
+
+#### Model 1
+cortisol = b0+ b1 x d15N+ b3 x d13C+ 
+b4 x body cond+ b5x body cond^2+  b6 x ILI+ b7 x litter size+ b8 x length of care+ year
+
+
+#### Model 2
+cortisol = b0+ b1 xd15N+ b3 x d13C+ 
+b4 x age+ b5x age^2+  b6 x ILI+ b8 x proportion diet+ (1|BearID)+ (1|year)
+
+These were two seperate models, but with multiple regression, all of the covaraites can be included together in a single model
+
+```{r}
+
+model <- plsr(cort~N15+C13.suess+age+year+cubsfirstcount+condition,
+              data=Cort.Repro, 
+              scale=TRUE, 
+              validation="CV")
+
+summary(model)
+
+```
+
+### Step 3: Model output
+Similar to the cars example in the tutorial, when I look at the RMSEP table, I see that the test RMSEP CV goes down with 1 and 2 comps, but increases with additional comps, so I should only include two PLS components in the final model.
+
+When I look at the Training Table (% variance explained) it's a bit less clear. While adding a component will always explain more variation in the model, there isn't a clear drop off in the amount explained. Although, it does decrease a bit after two comps.
+
+#### visualize cross-validation plots
+
+```{r}
+
+validationplot(model)
+validationplot(model, val.type="MSEP")
+validationplot(model, val.type="R2")
+
+
+```
+
+
+### Step 4: Use final model to make predictions
+
+####define training and testing sets
+```{r}
+train <- Cort.Repro[1:100,
+                    c("N15", "C13.suess", "age", "year",
+                            "cubsfirstcount", "condition","cort")]
+y_test <- Cort.Repro[101:nrow(Cort.Repro), c("cort")]
+test <- Cort.Repro[101:nrow(Cort.Repro),
+                   c("N15", "C13.suess", "age", "year",
+                            "cubsfirstcount", "condition")]
+```
+
+####use model to make predictions on a test set
+
+```{r}
+model <- plsr(cort~N15+C13.suess+age+year+cubsfirstcount+condition,
+              data=train, 
+              scale=TRUE, 
+              validation="CV")
+
+pcr_pred <- predict(model, test, ncomp=2)
+
+```
+
+####calculate RMSE
+```{r}
+
+sqrt(mean((pcr_pred - y_test)^2))
+
+```
+

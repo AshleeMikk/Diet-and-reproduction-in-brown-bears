@@ -552,6 +552,15 @@ Z15N <- (DFbinom$d15N-mean(DFbinom$d15N))/(2*sd(DFbinom$d15N))
 Zmatcond <- (DFbinom$MatCond-mean(DFbinom$MatCond))/(2*sd(DFbinom$MatCond))
 Zlitcond <-(DFbinom$LitCond-mean(DFbinom$LitCond))/(2*sd(DFbinom$LitCond))
 
+DFbinom$Zcort <- (DFbinom$MatCort-mean(DFbinom$MatCort))/(2*sd(DFbinom$MatCort))
+DFbinom$Zage <- (DFbinom$age-mean(DFbinom$age))/(2*sd(DFbinom$age))
+DFbinom$Zlitsize <-(DFbinom$LitSize-mean(DFbinom$LitSize))/(2*sd(DFbinom$LitSize))
+DFbinom$Z13C <- (DFbinom$d13C-mean(DFbinom$d13C))/(2*sd(DFbinom$d13C))
+DFbinom$Z15N <- (DFbinom$d15N-mean(DFbinom$d15N))/(2*sd(DFbinom$d15N))
+DFbinom$Zmatcond <- (DFbinom$MatCond-mean(DFbinom$MatCond))/(2*sd(DFbinom$MatCond))
+DFbinom$Zlitcond <-(DFbinom$LitCond-mean(DFbinom$LitCond))/(2*sd(DFbinom$LitCond))
+
+
 ```
 
 
@@ -651,6 +660,7 @@ for(i in 1:N){
 MP <- as.numeric(DFbinom$statut=="M")
 # create variable to hold the model outcome (length of maternal care). length of 1.5 is more common, so I will let that be the reference and longer maternal care the effect
 y <- as.numeric(DFbinom$LMC=="2.5")
+DFbinom$y<-y
 # Dim all have same length
 N <- length(MP)
 
@@ -725,6 +735,24 @@ MCMCsummary(ReJagsBinomMC.MBC,
                        "bMatBC", "bLitSize","bAge", "bMBCxLS"),
             round = 3)
 ```
+
+### Check against freq
+LMC = b0+ b1 x Cortisol + b2 x N15 + b3 x C13+ b4 x MaternalBC + b5 x LitterSize + b6 x age  + b8 x (MaternalBC x LiiterSize) +(1|BearID) + (1|year)
+
+```{r}
+
+library(lme4)
+library(optimx)
+DFbinom$fLMC <- as.factor(DFbinom$LMC)
+
+LMC.MBC <- glmer(fLMC~Zage+Zmatcond+(1|bearID)+(1|fYR),
+                 data = DFbinom,
+                 family = binomial)
+summary(LMC.MBC)
+
+
+```
+
 
 
 ## Litter BC
@@ -876,6 +904,17 @@ T.extreme <- fitstats$fit.new >= fitstats$fit
 ```
 
 
+### Checking against known frequentist estimates
+LMC = b0+ b1 x Cortisol + b2 x N15 + b3 x C13 + b5 x LitterSize + b6 x LitterBC + b7 x age  +(1|BearID) + (1|year)
+```{r}
+
+LMC.LBC <- glmer(fLMC~Zcort+Z15N+Z13C+Zlitsize+Zlitcond+(1|bearID)+(1|fYR),
+                 data = DFbinom,
+                 family = binomial)
+summary(LMC.LBC)
+
+
+```
 
 
 # Specifying the reduced model

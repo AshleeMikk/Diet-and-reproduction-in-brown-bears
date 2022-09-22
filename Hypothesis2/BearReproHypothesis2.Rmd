@@ -259,7 +259,6 @@ I did not see anything in the Cleveland dotplots that has me concerned about uni
 
 ```{r}
 
-
 ggplot(data = Cort.Repro, aes(ILI, cort))+
   geom_jitter(width = 0.1)+
   geom_boxplot(aes(group=ILI), alpha=0.4)+
@@ -313,6 +312,7 @@ For dN15, I hypothesized that this relationship could be linear, quadratic, or l
 
 library(lme4)
 library(MuMIn)
+Cort.Repro$bearID<-as.factor(Cort.Repro$bearID)
 
 CORTint<- lmer(cort ~1+(1|bearID)+(1|fYR),
                data = Cort.Repro,
@@ -476,7 +476,7 @@ sort(bear)
 
 table(Cort.Repro$year)
 yr<-as.factor(Cort.Repro$year)
-Nyr<-nlevels(year)
+Nyr<-nlevels(yr)
 yr<-as.numeric(yr)
 sort(yr)
 
@@ -516,11 +516,11 @@ cat(
     ## hyperpriors
   
   ### individual bear RI
-  bsigma ~ dunif(0,5)
+  bsigma ~ dunif(0,100)
   bear_tau <- pow(bsigma,-2)
   
   ### year RI
-  ysigma ~ dunif(0,5)
+  ysigma ~ dunif(0,100)
   year_tau <- pow(ysigma,-2)
   
   # derived quantities
@@ -600,6 +600,7 @@ autocorr.diag(as.mcmc(Hyp2.Int_output))
 MCMCsummary(Hyp2.Int, params = c("b0", "sigma","bsigma","ysigma"))
 
 J <- summary(Hyp2.Int_output)
+summary(CORTint)
 K <- as.data.frame(J[1:9,])
 print(K)
 
@@ -649,11 +650,11 @@ cat(
     ## hyperpriors
   
   ### individual bear RI
-  bsigma ~ dunif(0,5)
+  bsigma ~ dunif(0,100)
   bear_tau <- pow(bsigma,-2)
   
   ### year RI
-  ysigma ~ dunif(0,5)
+  ysigma ~ dunif(0,100)
   year_tau <- pow(ysigma,-2)
   
   # derived quantities

@@ -1,0 +1,178 @@
+---
+title: 'Summary: Analyzing physiological relationships in brown bear reproduction'
+author: "Ashlee Mikkelsen"
+date: "`r Sys.Date()`"
+output: 
+  word_document: 
+    toc: yes
+    highlight: tango
+    fig_width: 4
+    fig_height: 3.5
+    fig_caption: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+```
+
+
+```{r}
+setwd("~/Rprojects/Diet-and-reproduction-in-rown-bears/Univariate Models-First attempt")
+
+rm(list = ls())
+
+library(rjags)
+library(ggplot2)
+library(viridis)
+library(jagsUI)
+library(wiqid)
+library(GGally)
+library(MCMCvis)
+
+Bear.ReproData <- read.csv("BearReproData_Analysis.csv")
+
+MatCare <- subset(Bear.ReproData, reprocat=="Wcubs")
+
+mytheme <- theme(
+    axis.text = element_text(size = 15,face = "bold"),
+    axis.title = element_text(size = 17, face = "bold"),
+    panel.grid.major = element_line(color = "grey92"),
+    panel.grid.minor = element_line(color = "grey96"),
+    panel.background = element_rect(fill = "white"),
+    axis.line = element_line(colour = "black",size = 1),
+    axis.ticks = element_line(size = 1),
+    )
+theme_set(mytheme)
+# Subset data to limit results to 2 categories
+DFbinom <-subset(MatCare, weaningage!="litterloss") 
+#################
+## Rename variables for easier typing
+colnames(DFbinom)[11] <- "LitSize"
+colnames(DFbinom)[15] <- "LMC"
+colnames(DFbinom)[22] <- "d13C"
+colnames(DFbinom)[23] <- "d15N"
+colnames(DFbinom)[26] <- "MatCond"
+colnames(DFbinom)[28] <- "MatCort"
+colnames(DFbinom)[29] <- "LitCond"
+colnames(DFbinom)[30] <- "LitCort"
+
+BiNomMC.NumVar <- DFbinom[,c(3,6,11,22,23,26,28,29)]
+
+res <- cor(BiNomMC.NumVar, method = "pearson")
+
+```
+
+
+# A.	Hypothesis 1: Energetic demands and resource availability explains variation in length of maternal care
+
+## Model covariates
+
+### Fixed effects
+bear age, cortisol, litter size, parity, d13C, d15N, maternal body condition, and average condition among litter
+
+### Random effects
+bear ID and year
+
+### Possible interactions
+There could be an interaction between body condition and litter size. Females may have too large of a litter, requiring longer maternal care while females in good condition may have the same litter size but separate sooner. Therefore, I need to include (body condition*littersize).
+
+## Full model
+
+$$LMC = \beta_0+\beta_1AGE+\beta_2CORT+\beta_3LITSIZE+\beta_4Parity+
+\beta_5\delta^{15}N+\beta_6\delta^{13}C+
+\beta_7BODCON_{m}+\beta_8BODCON_{l}+\beta_9BODCON_{m}*LITSIZE$$
+## Colinearity
+
+```{r}
+
+print(res)
+
+```
+
+Maternal cortisol is highly correlated with year (PCC = 0.58; figure 1)
+Maternal condition is moderate to highly correlated with year (PCC = -0.46; figure 2)
+Litter condition is moderately correlated with year (PCC = -0.43; figure 3)
+
+```{r, fig.cap="Figure 1. Correlation between maternal cortisol concentrations and year"}
+ggplot(data = BiNomMC.NumVar, aes(year, MatCort))+
+  geom_jitter(width = 0.3, size=1.5, alpha=0.9)
+
+```
+
+
+
+
+```{r, fig.cap="Figure 2. Correlation between maternal body condition (mass/head circumference) and year."}
+
+ggplot(data = BiNomMC.NumVar, aes(year, MatCond))+
+  geom_jitter(width = 0.3)
+
+```
+
+
+
+
+```{r,fig.cap="Figure 3. Correlation between litter condition (average body condition (mass/head circumgerence) among offspring in a given litter)"}
+
+ggplot(data = BiNomMC.NumVar, aes(year, LitCond))+
+  geom_jitter(width = 0.3)
+
+```
+
+# Model results
+Maternal condition and litter condition were too correlated to run in a model together, so I ran two seperate models.
+
+
+## Maternal condition
+
+In the model that look ar at the effect of maternal condition on lendgth of maternal care, there was support in the data for an effect of female age as well as female condition. The probability of remaining with cubs for 2.5 years increased with age and decreased with increasing maternal condition. However, there was only weak evidence for an effect of body condition, and as you can see from the graph, the realized effect on the probability was extremely small
+```{r}
+LMC.age <- function(x){
+  -1.5558+(1.8989*x)+(1.46*-1.3672)
+}
+AGE <- seq(-0.7,1.5,0.05)
+Pred.LMC <- exp(LMC.age(AGE))/(1+exp(LMC.age(AGE)))
+
+Aage <- (AGE*(2*sd(DFbinom$age)))+mean(DFbinom$age)
+Aage
+
+DF1 <- as.data.frame(cbind(Aage,Pred.LMC))
+```
+
+
+```{r, fig.cap="Figure 4. Predicted probability that length of maternal care is 2.5 years based on age. Estimates derived from the reduced model with female body condition held at the mean"}
+ggplot(data = DF1, aes(Aage,Pred.LMC))+
+  geom_line(lwd=1.2)+
+  geom_point(size=2)+
+  ylab("Probability")+
+  xlab("Female age")
+
+
+```
+
+
+```{r}
+
+LMC.Cond <- function(x){
+  -1.5558+(1.8989*9)+(x*-1.3672)
+}
+
+COND <- seq(-1.4,1.4, 0.05)
+Pred.LMC2 <- exp(LMC.Cond(COND))/(1+exp(LMC.Cond(COND)))
+
+Acond <- (COND*(2*sd(DFbinom$MatCond)))+mean(DFbinom$MatCond)
+
+```
+
+```{r, fig.cap="Figure 5. Predicted probability that length fo maternal care is 2.5 years based on female body condition. Estimates derived from the reduced model with bage held at the mean"}
+DF2 <- as.data.frame(cbind(Acond,Pred.LMC2))
+ggplot(data = DF2, aes(Acond,Pred.LMC2))+
+  geom_line(lwd=1.2)+
+  geom_point(size=2)+
+  ylab("Probability")+
+  xlab("Female body condition")
+
+
+```
+

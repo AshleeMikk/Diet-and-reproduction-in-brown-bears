@@ -1,0 +1,1108 @@
+---
+title: "ReproHy2DataDevelopment"
+author: "Ashlee Mikkelsen"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Brown Bear Reproduction Hypothesis #2
+
+## Overview
+ Below I begin the process of cleaning data, building covariates, and writing models for the second hypothesis regarding brown bear reproduction:
+ 
+ There is a physiological difference between females with offspring, females newly seperated from offspring, and females who failed to reproduce detectable in brown bear hair.
+
+Cortisol is known to interfere with important reproductive hormones, such as progesterone and testosterone, as well as indicate the overall metabolic demand or "stress" and individual is under. Bears under severe metabolic demands should be less likely to implant embryos and miss years of reproduction. Females may alter how long they remain with their cubs based on energetic demands and life-history trade-offs. Offspring that are developmentally delayed or females who are not yet ready to reproduce again may delay family separation to give themselves or their offspring another year of development. Alternatively, because brown bears are long lived, they may favor future reproduction over at the cost of current reproduction. Bears under greater metabolic demands may be more likely to forage in high reward but risky areas near male bears to replenish their own body condition at the cost of increased infanticide risk.  
+ 
+ The underlying model for this hypothesis is as follows:
+ 
+ female hair cortisol = b0+ b1 x parity+ b2 x d15N+ b3 x d13C+
+  b4 x female body condition+ b5 x years since last litter+ b6 x litter size+
+  b7 x offspring body condition+ b8 x inter-litter interval+
+  b9 x length of care+ b10 x proportion diet+  (1|BearID)+(1|year)
+  
+## Expected relationships
+
+### CORT- d15N
+
+Cortisol and diet are intimately tied together, as bears with higher diet quality and quantity can sustain higher energetic demands before reaching a physiological emergency state. As reproduction is extremely energetically demanding, I expect two different relationships. 
+  In the first scenario, bears with high cortisol have low d15N signatures, which indicates relatively lower intake of high-protein foods. Cortisol will decrease with increrasing protein-rich foods, but may increase linearly or in a non-linear way. Cortisol may decrease slowly at first until a certain threshold is reached, after which it decreases rapidly. Conversely cortisol may rapidly decrease with greater protein consumption until protein demands are met and the benefit of ingesting protein tapers off.
+  In the second scenario, the relationship between cortisol and d15N is quadratic, where bears with diets less protein have moderate cortisol concentrations, which decrease and d15N increases to median levels. Beyond the median d15N concentration, cortisol increases. This relationship may have different mechanisms. One may be related to high d15N signatures related to muscle breakdown that results from protein deficiency and starvation. The second results from increased metabolic demands in bears who consume an excess of protein and must burn energy to excrete the nitrogen and disspate excess heat.
+
+  To model these relationships, I will need to use higher order or ln-transformed d15N values to determine which relationship best fits my data, then include only that term in the final model.
+  
+### CORT- maternal body condition
+
+As with offspring condition, The simplest relationship between maternal condition and maternal cortisol concentration would be a linear decrease in cortisol as body condition increases. This insinuates that females in better condition are under fewer metabolic demands and maintain low cortisol concentrations. In addition, the relationship between maternal body condition and maternal cortisol may be log-linear. We may see high cortisol associated with low body condition, which decreases to median body conditions, where it becomes stable. We may also see two different quadratic relationships. One would open upward and indicate a stabilizing selective relationship in which bears with median body conditions also have low cort levels. Bears with body conditions below the median may be under environmatal streesors and greater energetic demands, while bears above the median body condition may be incurring an energetic cost to maintain greater fat or muscle mass. If the quadratic relationship opens downwards, females in poor condition would have low cort, related to HPA exhaustion or downregulation, prehaps related to reproduction, and cort would increase to median body conditions, beyond which the cost of maintaining greater fat and lean mass may incur an energetic cost.
+
+### CORT- years since last litter
+
+Yrs since last litter should be a categorical variable. I expect that the cortisol will be highest one year after their last birth, as offspring have the highest dependence on females during that time. It should bee lower when it has been 2 years since the last littler, then increase again.
+
+### CORT- Litter size. 
+
+Cort should be greater with larger litter sizes, as caring for more young should have a higher energetic cost.
+
+### CORT- Length Maternal Care
+
+I expect length of maternal care to eihter increase with cortisol,  as bears under more energetic demands may need a longer period to fully grow. Conversely, females under energetic demands may seperate from their cubs earlier to preserve their own condition. As a result, there may be an interaction between cortisol and length of matrnal care.
+
+### CORT- parity
+
+young, inexperienced mothers typically have lower success, therefore I expect primiparous bears to have higher cortisol than multiparous bears
+
+### CORT-year
+
+I expect cortisol to vary annually with many unmeasured environmental variables. Because I do not have a complete time series and likely have missing data across years, I have to make the effect of year categorical rather than continuous.
+
+### CORT- Bear ID
+
+Because I have repeated measures on bears, I expect cortisol across years to be more similar within the same bear than between bears. However, I do expect the above covariates to affect the cortisol of the same bear sampled over many years.
+
+### Interactions
+
+Do I expect interactions between my covariates?
+
+I expect body condition could interact with several things and make my life really complicated. 
+
+For instance, I would expect cortisol to increase with litter size related to the energetic demands of producing and caring for more cubs. However, between bears with the same litter size in the same year, I would expect the bear in better condition to have lower cortisol. 
+
+There could also be an interaction between length of maternal care and maternal body condition. A female in good condition may produce and care for cubs well so that they are large enough to gain independence at 1.5 years and maintain relatively low cortisol while a female in poor condition may reproduce and then be forced to part with her cubs because she cannot not sustain care, resulting in relatively high cortisol
+
+
+# Data exploration and prep
+
+## load data and packages
+
+```{r}
+rm(list=ls())
+setwd("~/Rprojects/Diet-and-reproduction-in-rown-bears/Hypothesis2")
+
+
+library(ggplot2)
+library(GGally)
+library(wiqid)
+library(jagsUI)
+library(rjags)
+library(viridis)
+library(MCMCvis) # for summarizing MCMC output
+library(mcmcplots) # for plotting MCMC output
+library(patchwork) # for multi-panel plots
+
+mytheme <- theme(
+    axis.text = element_text(size = 18,face = "bold"),
+    axis.title = element_text(size = 20, face = "bold"),
+    panel.grid.major = element_line(color = "grey92"),
+    panel.grid.minor = element_line(color = "grey96"),
+    panel.background = element_rect(fill = "white"),
+    axis.line = element_line(colour = "black",size = 1),
+    axis.ticks = element_line(size = 1),
+    )
+theme_set(mytheme)
+
+HP2.dat <- read.csv("BearReproData_H2Analysis.csv")
+
+Cort.Repro <- HP2.dat[,c(1,3,6,10,11,12,13,14,15,16,22,23,26,28)]
+Cort.Repro <- subset(Cort.Repro, reprocat!="Wmother")
+
+colSums(is.na(Cort.Repro))
+
+ggplot(data = Cort.Repro, aes(cort))+
+  geom_histogram(binwidth = sd(Cort.Repro$cort)*0.5)
+
+```
+
+The distribution of our cortisol is highly left-skewed and positive
+
+#### Side bar
+Litter CORT and litter condition are missing too many records to include, but did have some interesting implications, so quickly I examine them on their own
+
+
+```{r}
+
+#side.bar <- HP2.dat[,c(1,3,6,10,11,12,13,14,15,16,22,23,26,28,29,30)]
+#side.bar <- subset(Cort.Repro, reprocat!="Wmother")
+#side.bar <- subset(side.bar,littercort!="NA")
+
+#SB.NumVar <- side.bar[,c(2,3,5,11,12,13,14,15,16)]
+
+#pairs(SB.NumVar)
+
+#ggpairs(SB.NumVar)
+
+
+```
+
+There are some interesting things here that are worth returning to and exploring. Maybe a bit about maternal trade-offs
+
+## Independence, colinearity and homogeneity
+
+Checking Independent variables for colinearity and violations of homogeneity and underlying structure in the data.
+
+
+### Colinearity
+
+```{r}
+
+CR.NumVar <- Cort.Repro[,c(2,3,5,11,12,13,14)]
+
+pairs(CR.NumVar)
+
+ggpairs(CR.NumVar)
+
+res <- cor(CR.NumVar, method = c("pearson", "kendall", "spearman"))
+print(res)
+corrplot::corrplot(res)
+
+# year and Cort are pretty correlated
+ggplot(data = Cort.Repro, aes(year, cort))+
+  geom_jitter(width = 0.2)+
+  mytheme
+## Cort is increasing through the years, but it is also becoming more variable
+
+# Age and condition are moderately correlated, unsurprisingly
+ggplot(data = Cort.Repro, aes(age, condition))+
+  geom_jitter(width = 0.2)+
+  mytheme
+
+```
+
+Cubs first count or litter size is highly correlated with age (0.68). Age is also moderately correlated with age (0.53). I will need to build separate models to compare the strength of each of these as an independent variable and determine how to move forward.
+
+
+### Ceveland Dot plots
+
+```{r}
+
+### Cleveland dot plots
+
+
+#######################
+#year
+dotchart(Cort.Repro$year,
+         groups = factor(Cort.Repro$reprocat),
+         ylab= "Repro Category",
+         xlab="year",
+         main="Cleveland Dotplot",
+         color = factor(Cort.Repro$reprocat)
+         )
+Cort.Repro$fYR <- as.factor(Cort.Repro$year)
+
+#######################
+#age
+dotchart(Cort.Repro$age,
+         groups = factor(Cort.Repro$reprocat),
+         ylab= "Repro Category",
+         xlab="age",
+         main="Cleveland Dotplot",
+         color = factor(Cort.Repro$reprocat)
+         )
+
+
+#######################
+# d13C
+dotchart(Cort.Repro$C13.suess,
+         groups = factor(Cort.Repro$reprocat),
+         ylab= "Repro Category",
+         xlab="d13C",
+         main="Cleveland Dotplot",
+         color = factor(Cort.Repro$reprocat)
+         )
+
+#######################
+# d15N
+dotchart(Cort.Repro$N15,
+         groups = factor(Cort.Repro$reprocat),
+         ylab= "Repro Category",
+         xlab="d15N",
+         main="Cleveland Dotplot",
+         color = factor(Cort.Repro$reprocat)
+         )
+
+#######################
+# female condition
+dotchart(Cort.Repro$condition,
+         groups = factor(Cort.Repro$reprocat),
+         ylab= "Repro Category",
+         xlab="female body condition",
+         main="Cleveland Dotplot",
+         color = factor(Cort.Repro$reprocat)
+         )
+
+#######################
+# cort
+dotchart(Cort.Repro$cort,
+         groups = factor(Cort.Repro$reprocat),
+         ylab= "Repro Category",
+         xlab="cortisol",
+         main="Cleveland Dotplot",
+         color = factor(Cort.Repro$reprocat)
+         )
+
+
+ggplot(data = Cort.Repro, aes(ILI, condition))+
+  geom_jitter(width = 0.1,aes(color=weaningage))+
+  geom_boxplot(aes(group=ILI), alpha=0.4)
+
+ggplot(data = Cort.Repro, aes(ILI, N15))+
+  geom_jitter(width = 0.1, aes(color=weaningage))+
+  geom_boxplot(aes(group=ILI), alpha=0.4)
+
+
+
+```
+
+I did not see anything in the Cleveland dotplots that has me concerned about unidentified structure within the data
+
+#### Side bar
+
+```{r}
+
+ggplot(data = Cort.Repro, aes(ILI, cort))+
+  geom_jitter(width = 0.1)+
+  geom_boxplot(aes(group=ILI), alpha=0.4)+
+  mytheme
+
+```
+It might be interesting to compare females who we know eventually reproduced (the BP category) and those who we have no known reproduction for (NKR)
+
+### Non-linear covariates
+
+Below I build covarites to model the non-linear relationships described above
+
+```{r}
+
+Cort.Repro$N15sq <- Cort.Repro$N15^2
+Cort.Repro$N15ln <- log(Cort.Repro$N15)
+
+Cort.Repro$conditionsq <- Cort.Repro$condition^2
+
+```
+
+
+
+
+### Z-transform continuous covariates
+
+```{r}
+Cort.Repro$age2<-Cort.Repro$age^2
+Cort.Repro$ageln<-log(Cort.Repro$age)
+Cort.Repro$fYR <- as.factor(Cort.Repro$year)
+Cort.Repro$Zage <- standardize(Cort.Repro$age)
+Cort.Repro$Zagesq <- standardize(Cort.Repro$age2)
+Cort.Repro$Zageln <- standardize(Cort.Repro$ageln)
+Cort.Repro$Zlitsize <- standardize(Cort.Repro$cubsfirstcount)
+Cort.Repro$Zd13C <- standardize(Cort.Repro$C13.suess)
+Cort.Repro$Zd15N <- standardize(Cort.Repro$N15)
+Cort.Repro$Zd15Nsq <- standardize(Cort.Repro$N15sq)
+Cort.Repro$Zd15Nln <- standardize(Cort.Repro$N15ln)
+Cort.Repro$Zcond <- standardize(Cort.Repro$condition)
+Cort.Repro$Zcondsq <- standardize(Cort.Repro$conditionsq)
+Cort.Repro$Zcort <- standardize(Cort.Repro$cort)
+
+```
+
+
+# Non-linear covariate determination
+
+Before I build a full model, I need to address the two variables that I hypothesized could take various shapes. To do this, I will compare simple models with only the effect of interest, determine which covariate has the best support, and then include that covariate in the full model.
+
+### d15N
+
+For dN15, I hypothesized that this relationship could be linear, quadratic, or log-linear. Therefore I will test these models against one another and against the intercept only model
+
+```{r}
+
+library(lme4)
+library(MuMIn)
+Cort.Repro$bearID<-as.factor(Cort.Repro$bearID)
+
+CORTint<- glmer(cort ~1+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+INTaic<-AICc(CORTint)
+
+
+Lin15N<- glmer(cort ~Zd15N+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+Lin15Naic<-AICc(Lin15N)
+summary(Lin15N)
+
+
+Quad15N<- glmer(cort ~Zd15N+Zd15Nsq+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+Quad15Naic<-AICc(Quad15N)
+
+
+Ln15N<- glmer(cort ~Zd15Nln+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               family = Gamma(link = "log"))
+Ln15Naic<-AICc(Ln15N)
+
+
+print(Lin15Naic)
+print(Quad15Naic)
+print(Ln15Naic)
+
+summary(Lin15N)
+summary(Ln15N)
+
+```
+
+Based on the AIcc values and deviance in the models, the linear relationship was the best d15N covariate, although it was only slightly better than the log-linear predictor.
+
+
+### Condition
+
+```{r}
+
+Lincond<- glmer(cort ~condition+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+Lincondaic<-AICc(Lincond)
+
+Quadcond<- glmer(cort ~condition+conditionsq+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+Quadcondaic<-AICc(Quadcond)
+
+summary(Quadcond)
+
+PredCort<- function(x){
+  exp(-1.613)*exp((4.864*x))*exp((-1.708*x^2))
+}
+min(Cort.Repro$condition)
+max(Cort.Repro$condition)
+
+NewCond<- seq(0.6,2.2,0.02)
+
+NewCort<-PredCort(NewCond)
+
+DAT<-cbind.data.frame(NewCond,NewCort)
+
+ggplot(data = DAT, aes(NewCond,NewCort))+
+  geom_line()
+ggplot(data = Cort.Repro, aes(condition,cort))+
+  geom_jitter(width = 0.01, size=1.5, alpha=0.4, height = 0.4)+
+  mytheme
+
+```
+
+In this case, the quadratic relationship performed much better than the linear relationship, and therefore this will be the relationship included in the full model.
+
+# Testing correlated covariates
+Above I determined that age was highly correlated with litter size and also with body condition. Like my methods above, I am going to model each of these and compare their power to explain deviance in the cortisol data. If there is no or weak support in the data for an effect (CIs that largely overlap zero and AICc values greater than intercept only model), I will exclude them from further modelling. If there is strong support for an effect in the data, I will retain them and build seperate models to accomidate their colinearity and use the results of both models to draw inference.
+
+## Age
+
+I forgot to address this above, but as I was getting ready to model this, it occurred to me that this is another case where I will also need to test for non-linear relatonships. It doesn't really make physiological sense for cortisol to continuously increase through life. It seems more likely that it may increase and then decrease in a quadratic relationship or increase to a certain age and then plateau.
+```{r}
+###########
+# Age
+Cort.Repro$age2<-Cort.Repro$age^2
+Cort.Repro$ageln<-log(Cort.Repro$age)
+
+Linagelm<- glmer(cort ~Zage+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+Linageaic<-AICc(Linagelm)
+summary(Linagelm)
+
+Quadagelm<- glmer(cort ~Zage+Zagesq+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+Quadageaic<-AICc(Quadagelm)
+summary(Quadagelm)
+
+lnagelm<- glmer(cort ~Zageln+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+lnageaic<-AICc(lnagelm)
+
+print(Linageaic)
+print(Quadageaic)
+print(lnageaic)
+
+summary(Quadagelm)
+
+### The quadratic relationship had the most support 
+
+CortAge<-function(x){
+  exp(1.742)*exp((0.729*x))*exp((-0.661*x^2))
+}
+age<-seq(1,20,1)
+pred.cort<-CortAge(age)
+DF<-data.frame(cbind(age,pred.cort))
+ggplot(data = DF, aes(age,pred.cort))+
+  geom_line(lwd=1.2)
+
+```
+
+
+## Litter size
+
+```{r}
+
+Littsizelm<- glmer(cort ~cubsfirstcount+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+Littsizeaic<-AICc(Littsizlm)
+summary(Littsizelm)
+
+```
+There is strong evidence for a linear effect of litter size on cortisol. Because litter size and body condition are not strongly correlated (0.5) these two can and will be modeled together 
+
+## Body condition
+As noted above, I already know that the quadratic of condition is the best predictor. Both variables have a quadratic relationship, but the strength of age is much greater than the strength of body condition. However, because there is evidence for both, I will need to use separate models to model their effects.
+
+# Inference Modeling
+
+cortisol = b0+ b1 x parity+ b2 x d15N+ b3 x d13C+ 
+b4 x body cond+ b5x body cond^2+  b6 x ILI+ b7 x litter size+ b8 x length of care+ b9 x proportion diet+ 
+b10 x (body cond x litter size)+ b11 x (cond x LMC)+ 
+(1|BearID)+ (1|year)
+
+cortisol = b0+ b1 x parity+ b2 x d15N+ b3 x d13C+ 
+b4 x age+ b5x age^2+  b6 x ILI+ b8 x proportion diet+ (1|BearID)+ (1|year)
+  
+
+To keep my head straight through this process, I am going to use the build up strategy that I used in my master's research and establish that all models greater than the intercept are worth retaining and carrying over into the next modeling step. I will begin with uni variate models (which I will include condition in, even though that technically has two terms). All covariates with a log likelihood greater than the intercept will carried into bi-variate models and so on. the final model list will include all models with likelihoods greater than the intercept only model, the intercept only model, and the full model. I will use this full model list to draw multi-modal inference. 
+ 
+Note: This process may change later to simplify results or inferences.
+
+## Step 0: random effects
+
+
+### Intercept only model
+
+```{r}
+
+library(lme4)
+library(MuMIn)
+
+overdisp_fun <- function(model) {
+    rdf <- df.residual(model)
+    rp <- residuals(model,type="pearson")
+    Pearson.chisq <- sum(rp^2)
+    prat <- Pearson.chisq/rdf
+    pval <- pchisq(Pearson.chisq, df=rdf, lower.tail=FALSE)
+    c(chisq=Pearson.chisq,ratio=prat,rdf=rdf,p=pval)
+}
+
+
+
+
+Cort.Repro$bearID<-as.factor(Cort.Repro$bearID)
+
+CORTint<- glmer(cort ~1+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+INTaic<-AICc(CORTint)
+summary(CORTint)
+
+overdisp_fun(CORTint)
+testdata <- createData(sampleSize = 500)
+fittedModel <- CORTint
+
+testDispersion(fittedModel)
+
+simulationOutput <- simulateResiduals(fittedModel = fittedModel, plot = T)
+residuals(simulationOutput)
+residuals(simulationOutput, quantileFunction = qnorm, outlierValues = c(-7,7))
+plot(simulationOutput)
+##### To support the visual inspection of the residuals, the DHARMa package provides a number of specialized goodness-of-fit tests on the simulated residuals:
+
+testUniformity(fittedModel) # tests if the overall distribution conforms to expectations
+
+testOutliers(fittedModel) # tests if there are more simulation outliers than expected
+
+testDispersion(fittedModel) #tests if the simulated dispersion is equal to the observed dispersion
+
+testQuantiles(fittedModel) #fits a quantile regression or residuals against a predictor (default predicted value), and tests of this conforms to the expected quantile
+  
+#testCategorical(simulationOutput, catPred = testData$group) # tests residuals against a categorical predictor
+
+testZeroinflation(fittedModel) #tests if there are more zeros in the data than expected from the simulations
+
+#testGeneric(fittedModel) #test if a generic summary statistics (user-defined) deviates from model expectations
+
+#testTemporalAutocorrelation(fittedModel) #tests for temporal autocorrelation in the residuals
+
+#testSpatialAutocorrelation() - tests for spatial autocorrelation in the residuals. Can also be used with a generic distance function, for example to test for phylogenetic signal in the residuals
+
+
+```
+
+
+
+## Step 1: Univariate models
+
+### dN15
+
+```{r}
+d15Nlm<- glmer(cort ~Zd15N+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+
+d15Naic<-AICc(d15Nlm)
+summary(d15Nlm)
+
+exp(-0.09147)
+268/1145.9
+overdisp_fun(d15Nlm)
+
+
+fittedModel <- d15Nlm
+testdata <- createData(sampleSize = 500)
+testDispersion(fittedModel)
+
+simulationOutput <- simulateResiduals(fittedModel = fittedModel, plot = T)
+residuals(simulationOutput)
+residuals(simulationOutput, quantileFunction = qnorm, outlierValues = c(-7,7))
+plot(simulationOutput)
+plot(residuals(simulationOutput))
+testUniformity(fittedModel)
+testOutliers(fittedModel)
+testDispersion(fittedModel)
+testQuantiles(fittedModel)
+
+```
+
+
+
+### d13C
+
+```{r}
+
+d13Clm<- glmer(cort ~Zd13C+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+
+d13Caic<-AICc(d13Clm)
+summary(d13Clm)
+
+fittedModel <- d13Clm
+testdata <- createData(sampleSize = 500)
+testDispersion(fittedModel)
+
+simulationOutput <- simulateResiduals(fittedModel = fittedModel, plot = T)
+residuals(simulationOutput)
+residuals(simulationOutput, quantileFunction = qnorm, outlierValues = c(-7,7))
+plot(simulationOutput)
+plot(residuals(simulationOutput))
+testUniformity(fittedModel)
+testOutliers(fittedModel)
+testDispersion(fittedModel)
+testQuantiles(fittedModel)
+
+```
+
+
+### Body Cond
+
+```{r}
+BodyCondlm<- glmer(cort ~Zcond+Zcondsq+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+
+BodyCondaic<-AICc(BodyCondlm)
+summary(BodyCondlm)
+
+fittedModel <- BodyCondlm
+testdata <- createData(sampleSize = 500)
+testDispersion(fittedModel)
+
+simulationOutput <- simulateResiduals(fittedModel = fittedModel, plot = T)
+residuals(simulationOutput)
+residuals(simulationOutput, quantileFunction = qnorm, outlierValues = c(-7,7))
+plot(simulationOutput)
+plot(residuals(simulationOutput))
+testUniformity(fittedModel)
+testOutliers(fittedModel)
+testDispersion(fittedModel)
+testQuantiles(fittedModel)
+
+
+```
+
+
+### Inter Litter Interval
+
+```{r}
+
+ILIlm<- glmer(cort ~ILI+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+
+ILIaic<-AICc(ILIlm)
+summary(ILIlm)
+
+table(Cort.Repro$ILI)
+
+fittedModel <- ILIlm
+testdata <- createData(sampleSize = 500)
+testDispersion(fittedModel)
+
+simulationOutput <- simulateResiduals(fittedModel = fittedModel, plot = T)
+residuals(simulationOutput)
+residuals(simulationOutput, quantileFunction = qnorm, outlierValues = c(-7,7))
+plot(simulationOutput)
+plot(residuals(simulationOutput))
+testUniformity(fittedModel)
+testOutliers(fittedModel)
+testDispersion(fittedModel)
+testQuantiles(fittedModel)
+
+```
+
+
+### Litter Size
+```{r}
+
+LitSizelm<- glmer(cort ~Zlitsize+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+
+LitSizeaic<-AICc(LitSizelm)
+summary(LitSizelm)
+
+fittedModel <- Littsizelm
+testdata <- createData(sampleSize = 500)
+testDispersion(fittedModel)
+
+simulationOutput <- simulateResiduals(fittedModel = fittedModel, plot = T)
+residuals(simulationOutput)
+residuals(simulationOutput, quantileFunction = qnorm, outlierValues = c(-7,7))
+plot(simulationOutput)
+plot(residuals(simulationOutput))
+testUniformity(fittedModel)
+testOutliers(fittedModel)
+testDispersion(fittedModel)
+testQuantiles(fittedModel)
+
+```
+
+
+### Age
+```{r}
+Agelm<- glmer(cort ~Zage+Zagesq+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+Ageaic<-AICc(Agelm)
+summary(Agelm)
+
+fittedModel <- Agelm
+testdata <- createData(sampleSize = 500)
+testDispersion(fittedModel)
+
+simulationOutput <- simulateResiduals(fittedModel = fittedModel, plot = T)
+residuals(simulationOutput)
+residuals(simulationOutput, quantileFunction = qnorm, outlierValues = c(-7,7))
+plot(simulationOutput)
+plot(residuals(simulationOutput))
+testUniformity(fittedModel)
+testOutliers(fittedModel)
+testDispersion(fittedModel)
+testQuantiles(fittedModel)
+
+
+```
+
+
+### Parity
+
+```{r}
+Paritylm<- glmer(cort ~statut+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+Parityaic<-AICc(Paritylm)
+summary(Paritylm)
+
+fittedModel <- Paritylm
+testdata <- createData(sampleSize = 500)
+testDispersion(fittedModel)
+
+simulationOutput <- simulateResiduals(fittedModel = fittedModel, plot = T)
+residuals(simulationOutput)
+residuals(simulationOutput, quantileFunction = qnorm, outlierValues = c(-7,7))
+plot(simulationOutput)
+plot(residuals(simulationOutput))
+testUniformity(fittedModel)
+testOutliers(fittedModel)
+testDispersion(fittedModel)
+testQuantiles(fittedModel)
+```
+
+
+```{r, eval=FALSE}
+############################################## Testing parity
+table(Cort.Repro$statut)
+
+TESTdf <- subset(Cort.Repro, statut!="N")
+
+Paritylm<- glmer(cort ~statut+(1|bearID)+(1|fYR),
+               data = TESTdf,
+               family = gaussian(link = "log"))
+Parityaic<-AICc(Paritylm)
+summary(Paritylm)
+
+fittedModel <- Paritylm
+testdata <- createData(sampleSize = 500)
+testDispersion(fittedModel)
+
+simulationOutput <- simulateResiduals(fittedModel = fittedModel, plot = T)
+residuals(simulationOutput)
+residuals(simulationOutput, quantileFunction = qnorm, outlierValues = c(-7,7))
+plot(simulationOutput)
+plot(residuals(simulationOutput))
+testUniformity(fittedModel)
+testOutliers(fittedModel)
+testDispersion(fittedModel)
+testQuantiles(fittedModel)
+
+FULL.lm.BC <- glmer(cort ~Zd15N+Zd13C+Zcond+Zcondsq+ILI+Zlitsize+
+                    Zcond*Zlitsize+(1|bearID)+(1|fYR),
+               data = TESTdf,
+               family = gaussian(link = "log"),
+               control = glmerControl(optimizer="bobyqa",
+                                      optCtrl=list(maxfun=2e5)))
+FULL.BCaic<-AICc(FULL.lm.BC)
+summary(FULL.lm.BC)
+
+fittedModel <- FULL.lm.BC
+testdata <- createData(sampleSize = 500)
+testDispersion(fittedModel)
+
+simulationOutput <- simulateResiduals(fittedModel = fittedModel, plot = T)
+residuals(simulationOutput)
+residuals(simulationOutput, quantileFunction = qnorm, outlierValues = c(-7,7))
+plot(simulationOutput)
+plot(residuals(simulationOutput))
+testUniformity(fittedModel)
+testOutliers(fittedModel)
+testDispersion(fittedModel)
+testQuantiles(fittedModel)
+
+print(FULL.BCaic)
+print(Parityaic)
+
+```
+
+There is something going on with the effect of parity. For now, I think I am going to just move on until I can have a meeting with my committee about it. I don't think it makes sense for it to be explaining SO much variation in the cortisol data, but I also can't figure out why it's happenning.
+
+ACTUALLY ILI contains parity info. so no need
+
+### Full Model
+
+#### Full model with age
+```{r}
+FULL.lm.Age<- glmer(cort ~Zd15N+Zd13C+Zage+Zagesq+
+                      ILI+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               nAGQ=0,
+               family = gaussian(link = "log"),
+               control = glmerControl(optimizer="nloptwrap", 
+                                      tolPwrss = 1e-7,
+                                      optCtrl=list(maxfun=2e6,
+                                                   boundary.tol=1e-8)))
+
+FULL.Ageaic.TEST<-AICc(FULL.lm.Age)
+summary(FULL.lm.Age)
+
+fittedModel <- FULL.lm.Age
+testdata <- createData(sampleSize = 500)
+testDispersion(fittedModel)
+
+simulationOutput <- simulateResiduals(fittedModel = fittedModel, plot = T)
+residuals(simulationOutput)
+residuals(simulationOutput, quantileFunction = qnorm, outlierValues = c(-7,7))
+plot(simulationOutput)
+plot(residuals(simulationOutput))
+testUniformity(fittedModel)
+testOutliers(fittedModel)
+testDispersion(fittedModel)
+testQuantiles(fittedModel)
+
+```
+
+
+
+#### Full mody with body condition
+
+```{r}
+FULL.lm.BC <- glmer(cort~Zd15N+Zd13C+Zcond+Zcondsq+ILI+Zlitsize+
+                      (1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"),
+               control = glmerControl(optimizer="bobyqa",
+                                      optCtrl=list(maxfun=2e5)))
+FULL.BCaic<-AICc(FULL.lm.BC)
+summary(FULL.lm.BC)
+
+fittedModel <- FULL.lm.BC
+testdata <- createData(sampleSize = 500)
+testDispersion(fittedModel)
+
+simulationOutput <- simulateResiduals(fittedModel = fittedModel, plot = T)
+residuals(simulationOutput)
+residuals(simulationOutput, quantileFunction = qnorm, outlierValues = c(-7,7))
+plot(simulationOutput)
+plot(residuals(simulationOutput))
+testUniformity(fittedModel)
+testOutliers(fittedModel)
+testDispersion(fittedModel)
+testQuantiles(fittedModel)
+
+
+```
+
+
+
+cortisol = b0+ b2 x d15N+ b3 x d13C+ 
+b4 x body cond+ b5x body cond^2+  b6 x ILI+ b7 x litter size+ b8 xage+ b9 x (body cond x litter size)+ (1|BearID)+ (1|year)
+
+cortisol = b0+ b2 x d15N+ b3 x d13C+ 
+b4 x age+ b5x age^2+  b6 x ILI+ b8 x proportion diet+ (1|BearID)+ (1|year)
+
+## Step 2: Reduced models
+
+After the first round of modeling, everything except carbon explained more variance in the data than the intercept only model.So I will remove d13C from the full models and compare them to the full models
+
+### Reduced Models
+
+#### Reduced age model
+```{r}
+RED.lm.Age<- glmer(cort ~Zd15N+Zage+Zagesq+
+                      ILI+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               nAGQ=0,
+               family = gaussian(link = "log"),
+               control = glmerControl(optimizer="bobyqa",
+                                      optCtrl=list(maxfun=2e5)))
+
+RED.Ageaic<-AICc(RED.lm.Age)
+summary(RED.lm.Age)
+
+fittedModel <- RED.lm.Age
+testdata <- createData(sampleSize = 500)
+testDispersion(fittedModel)
+
+simulationOutput <- simulateResiduals(fittedModel = fittedModel, plot = T)
+residuals(simulationOutput)
+residuals(simulationOutput, quantileFunction = qnorm, outlierValues = c(-7,7))
+plot(simulationOutput)
+plot(residuals(simulationOutput))
+testUniformity(fittedModel)
+testOutliers(fittedModel)
+testDispersion(fittedModel)
+testQuantiles(fittedModel)
+
+```
+
+
+
+#### Reduced Body Condition Model
+
+```{r}
+RED.lm.BC <- glmer(cort ~Zd15N+Zcond+Zcondsq+ILI+Zlitsize+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"),
+               control = glmerControl(optimizer="bobyqa",
+                                      optCtrl=list(maxfun=2e5)))
+RED.BCaic<-AICc(RED.lm.BC)
+summary(RED.lm.BC)
+
+fittedModel <- RED.lm.BC
+testdata <- createData(sampleSize = 500)
+testDispersion(fittedModel)
+
+simulationOutput <- simulateResiduals(fittedModel = fittedModel, plot = T)
+residuals(simulationOutput)
+residuals(simulationOutput, quantileFunction = qnorm, outlierValues = c(-7,7))
+plot(simulationOutput)
+plot(residuals(simulationOutput))
+testUniformity(fittedModel)
+testOutliers(fittedModel)
+testDispersion(fittedModel)
+testQuantiles(fittedModel)
+
+table(Cort.Repro$ILI)
+
+
+```
+
+### Reduced Reduced models
+After a bit more digging, I foun that ILI was correlated with age and body condition. Maybe a multinomial approach would be better for this whole analysis. Or a combined approach?
+
+#### Reduced Reduced Body Condition Model
+
+```{r}
+RED.RED.lm.BC <- glmer(cort ~Zd15N+Zcond+Zcondsq+Zlitsize+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"),
+               control = glmerControl(optimizer="bobyqa",
+                                      optCtrl=list(maxfun=2e5)))
+RED.RED.BCaic<-AICc(RED.RED.lm.BC)
+summary(RED.RED.lm.BC)
+
+fittedModel <- RED.RED.lm.BC
+testdata <- createData(sampleSize = 500)
+testDispersion(fittedModel)
+
+simulationOutput <- simulateResiduals(fittedModel = fittedModel, plot = T)
+residuals(simulationOutput)
+residuals(simulationOutput, quantileFunction = qnorm, outlierValues = c(-7,7))
+plot(simulationOutput)
+plot(residuals(simulationOutput))
+testUniformity(fittedModel)
+testOutliers(fittedModel)
+testDispersion(fittedModel)
+testQuantiles(fittedModel)
+
+```
+
+#### Reduced Reduced age model
+```{r}
+RED.RED.lm.Age<- glmer(cort ~Zd15N+Zage+Zagesq+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               nAGQ=0,
+               family = gaussian(link = "log"),
+               control = glmerControl(optimizer="bobyqa",
+                                      optCtrl=list(maxfun=2e5)))
+
+RED.RED.Ageaic<-AICc(RED.RED.lm.Age)
+summary(RED.RED.lm.Age)
+
+fittedModel <- RED.RED.lm.Age
+testdata <- createData(sampleSize = 500)
+testDispersion(fittedModel)
+
+simulationOutput <- simulateResiduals(fittedModel = fittedModel, plot = T)
+residuals(simulationOutput)
+residuals(simulationOutput, quantileFunction = qnorm, outlierValues = c(-7,7))
+plot(simulationOutput)
+plot(residuals(simulationOutput))
+testUniformity(fittedModel)
+testOutliers(fittedModel)
+testDispersion(fittedModel)
+testQuantiles(fittedModel)
+
+```
+
+## Step 3: Examine Model output
+
+The reduced body condition model is currently the top model, but something odd is going on with inter-litter interval. All mr categorical covariates are fussy it seems. I must have missed something in the initial data screening process.
+
+### Investigate ILI and make sure it's safe to leve in the model
+
+### graphically
+```{r}
+table(Cort.Repro$ILI)
+
+ggplot(data = Cort.Repro, aes(ILI,cort))+
+  geom_jitter(width = 0.1, aes(color=ILI))+
+  geom_boxplot(aes(group=ILI, fill=ILI), alpha=0.6)+
+  scale_fill_viridis(discrete = TRUE)+
+  scale_color_viridis(discrete = TRUE)
+
+TESTdf <- subset(Cort.Repro, ILI!="FV")
+TESTdf <- subset(TESTdf, ILI!="FR")
+
+# There were too few samples in the four and five categories, so I removed those records
+
+#### cort
+ggplot(data = TESTdf, aes(ILI,cort))+
+  geom_jitter(width = 0.1, aes(color=ILI))+
+  geom_boxplot(aes(group=ILI, fill=ILI), alpha=0.6)+
+  scale_fill_viridis(discrete = TRUE)+
+  scale_color_viridis(discrete = TRUE)
+
+ggplot(data = TESTdf, aes(cort))+
+  geom_histogram(aes(fill=ILI), binwidth = 0.5*sd(TESTdf$cort), alpha=0.7)+
+  scale_fill_viridis(discrete = TRUE)
+
+### d15N
+
+ggplot(data = TESTdf, aes(ILI,N15))+
+  geom_jitter(width = 0.1, aes(color=ILI))+
+  geom_boxplot(aes(group=ILI, fill=ILI), alpha=0.6)+
+  scale_fill_viridis(discrete = TRUE)+
+  scale_color_viridis(discrete = TRUE)
+
+ggplot(data = TESTdf, aes(N15))+
+  geom_histogram(aes(fill=ILI), binwidth = 0.5*sd(TESTdf$N15), alpha=0.7)+
+  scale_fill_viridis(discrete = TRUE)
+
+### condition
+ggplot(data = TESTdf, aes(ILI,condition))+
+  geom_jitter(width = 0.1, aes(color=ILI))+
+  geom_boxplot(aes(group=ILI, fill=ILI), alpha=0.6)+
+  scale_fill_viridis(discrete = TRUE)+
+  scale_color_viridis(discrete = TRUE)
+
+ggplot(data = TESTdf, aes(condition))+
+  geom_histogram(aes(fill=ILI), binwidth = 0.5*sd(TESTdf$N15), alpha=0.7)+
+  scale_fill_viridis(discrete = TRUE)
+
+### age
+ggplot(data = TESTdf, aes(ILI,age))+
+  geom_jitter(width = 0.1, aes(color=ILI))+
+  geom_boxplot(aes(group=ILI, fill=ILI), alpha=0.6)+
+  scale_fill_viridis(discrete = TRUE)+
+  scale_color_viridis(discrete = TRUE)
+
+ggplot(data = TESTdf, aes(age))+
+  geom_histogram(aes(fill=ILI), binwidth = 0.5*sd(TESTdf$N15), alpha=0.7)+
+  scale_fill_viridis(discrete = TRUE)
+
+
+```
+
+
+Yeah, so Age and condition. Return to step 2 and remove ILI from the full models
+ Now, the best model is the age and \delta\ 15N model:
+$$
+Cortisol = exp(\beta_0\ )* exp(\beta_1\ * \delta\ 15N) * exp(\beta_2\ * age) * exp(\beta_3\ * age^2)
+$$
+
+$$
+Cortisol = exp(1.739 )* exp(-0.058* \delta\ 15N) * exp(0.680 * age) * exp(-0613* age^2)
+$$
+
+```{r}
+
+mean(Cort.Repro$Zd15N)
+
+Model1.age <- function(x){
+  1.1739+(0.67979*log(x))+(-0.61346*log(x^2))
+}
+
+age<-seq(1,20,0.5)
+age.cort <- Model1.age(age)
+DF <- as.data.frame(cbind(age,age.cort))
+
+ggplot(DF, aes(age, age.cort))+
+  geom_line()
+
+Model1.age <- function(x){
+  exp(1.1739)+exp(0.67979*x)+exp(-0.61346*(x^2))
+}
+
+min(Cort.Repro$Zage)
+max(Cort.Repro$Zage)
+age<-seq(-1,3.3,0.1)
+age.cort <- Model1.age(age)
+DF <- as.data.frame(cbind(age,age.cort))
+
+ggplot(DF, aes(age, age.cort))+
+  geom_line()
+
+
+```
+
