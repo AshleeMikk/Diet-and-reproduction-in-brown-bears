@@ -55,7 +55,7 @@ So, initial modeling did not got weel. I found a lot of really neat correlations
 
 In doing some of the research for the pace of life paper Anne and I are planning, I came across several methods of multiple regression that sound like they would be a nice alternative to typical linear regression. So below, I start a journey to fins a better way to analyze this complex dataset.
 
-## Partial Least squares
+## Partial Least squares example 1
 
 I begin by following along with a tutorial from statology. org (https://www.statology.org/partial-least-squares-in-r/) that goes through the basics of performing a partial least squares regression. They use the cars data in package mtcars, but I am using the bear data
 
@@ -141,4 +141,68 @@ pcr_pred <- predict(model, test, ncomp=2)
 sqrt(mean((pcr_pred - y_test)^2))
 
 ```
+
+
+#pls package example 2
+
+## Model and data prep
+First we divide the data into training and test data
+
+```{r}
+is.na(Cort.Repro)
+273/2
+dfTrain <- data.frame(Cort.Repro[1:136,])
+dfTest <- data.frame(Cort.Repro[137:272,])
+
+
+model1 <- plsr(cort~N15+C13.suess+I(age+age2)+year+cubsfirstcount+
+                 I(condition+conditionsq)+reprocat+
+                 statut+weaningage+ILI,
+              data=dfTrain, 
+              validation="LOO",
+              Scale=TRUE,
+              ncom=5)
+```
+
+
+## Model validation
+```{r}
+summary(model1)
+
+plot(RMSEP(model1), legendpos = "topright")
+plot(model1, ncomp = 2, asp = 1, line = TRUE)
+plot(model1, ncomp = 3, asp = 1, line = TRUE)
+plot(model1, plottype = "scores", comps = 1:3)
+explvar(model1)
+
+plot(model1, "loadings", comps = 1:3, legendpos = "topleft")
+abline(h = 0)
+
+
+predict(model1, ncomp = 3, newdata = dfTest)
+RMSEP(model1, newdata = dfTest)
+
+# determining number of components
+ncomp.onesigma <- selectNcomp(model1, method = "onesigma", plot = TRUE,
+                              ylim = c(.18, .6))
+ncomp.permut <- selectNcomp(model1, method = "randomization", plot = TRUE,
+                            ylim = c(.18, .6))
+
+model1.cv <- crossval(model1, segments = 10)
+plot(MSEP(model1.cv), legendpos="topright")
+summary(model1, what = "validation")
+
+```
+
+## Inspecting fitted models
+### plotting
+
+
+```{r}
+plot(model1, plottype = "coef", ncomp=1:3, legendpos = "bottomleft")
+
+plot(model1,plottype = "correlation")
+```
+
+
 

@@ -280,6 +280,7 @@ Cort.Repro$N15sq <- Cort.Repro$N15^2
 Cort.Repro$N15ln <- log(Cort.Repro$N15)
 
 Cort.Repro$conditionsq <- Cort.Repro$condition^2
+Cort.Repro$age2<-Cort.Repro$age^2
 
 ```
 
@@ -289,7 +290,6 @@ Cort.Repro$conditionsq <- Cort.Repro$condition^2
 ### Z-transform continuous covariates
 
 ```{r}
-Cort.Repro$age2<-Cort.Repro$age^2
 Cort.Repro$ageln<-log(Cort.Repro$age)
 Cort.Repro$fYR <- as.factor(Cort.Repro$year)
 Cort.Repro$Zage <- standardize(Cort.Repro$age)
