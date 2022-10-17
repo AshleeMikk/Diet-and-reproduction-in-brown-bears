@@ -217,14 +217,14 @@ mZcond.sq <- mean(Zcond.sq)
 ## Create new data
 ```{r}
 
-New.cort <- seq(min(Zcort),max(Zcort), length.out=200 )
-New.yr <- seq(min(Zyr),max(Zyr), length.out=200)
-New.age <- seq(min(Zage),max(Zage), length.out=200)
+New.cort <- seq(min(Zcort),max(Zcort), length.out=nrow(Cort.Repro))
+New.yr <- seq(min(Zyr),max(Zyr), length.out=nrow(Cort.Repro))
+New.age <- seq(min(Zage),max(Zage), length.out=nrow(Cort.Repro))
 New.age.sq <-New.age^2
-New.ncubs <- seq(min(Zncubs),max(Zncubs), length.out=200)
-New.13C <- seq(min(Z13C),max(Z13C), length.out=200)
-New.15N <- seq(min(Z15N),max(Z15N), length.out=200)
-New.cond <- seq(min(Zcond),max(Zcond), length.out=200)
+New.ncubs <- seq(min(Zncubs),max(Zncubs), length.out=nrow(Cort.Repro))
+New.13C <- seq(min(Z13C),max(Z13C), length.out=nrow(Cort.Repro))
+New.15N <- seq(min(Z15N),max(Z15N), length.out=nrow(Cort.Repro))
+New.cond <- seq(min(Zcond),max(Zcond), length.out=nrow(Cort.Repro))
 New.cond.sq <- New.cond^2
 
 ```
@@ -245,48 +245,258 @@ Cort.Yr <- function(x){
   C[1]+C[2]*x+C[3]*mZage+C[4]*mZage.sq+C[5]*mZncubs+C[6]*mZ13C+C[7]*mZ15N+
     C[8]*mZcond+C[9]*mZcond.sq
 }
-A <- Cort.Yr(New.yr)
-plot(New.yr,A)
+Y <- Cort.Yr(New.yr)
+plot(New.yr,Y)
 
-UnZcort <- A*
+UnZcort.Y <- (Y*sd(Cort.Repro$cort))+mean(Cort.Repro$cort)
+print(UnZcort.Y)
 
+UnZyr<- (New.yr*sd(Cort.Repro$year))+mean(Cort.Repro$year)
+print(UnZyr)
 
-Year.DF <- as.data.frame(cbind(A, New.yr))
+Year.DF <- as.data.frame(cbind(Y, New.yr,UnZcort.Y,UnZyr,
+                               Cort.Repro$cort, Cort.Repro$year))
 
-ggplot(data = Year.DF, aes(New.yr,A))+
-  geom_line(lwd=1.2)
+ggplot(data = Year.DF, aes(UnZyr,UnZcort.Y))+
+  geom_line(lwd=1.2)+
+  geom_jitter(aes(V6,V5), size=2, alpha=0.3, width = 0.15)+
+  ylab("Hair cortisol")+
+  xlab("Year")+
+  scale_y_continuous(limits = c(0,35))
+
+ggplot(data = Year.DF, aes(UnZyr,UnZcort.Y))+
+  geom_line(lwd=1.2)+
+  geom_jitter(aes(V6,V5), size=2, alpha=0.3, width = 0.15)+
+  ylab("Hair cortisol")+
+  xlab("Year")+
+  scale_y_continuous(limits = c(0,15))
 
 ```
 
-
+### Age
 ```{r}
 Cort.age <-  function(x){
   C[1]+
     C[2]*mZyr+
-    C[3]*New.age+C[4]*(New.age^2)+
+    (C[3]*New.age)+(C[4]*(New.age^2))+
     C[5]*mZncubs+
     C[6]*mZ13C+
     C[7]*mZ15N+
-    C[8]*mZcond+C[9]*mZcond.sq
+    (C[8]*mZcond)+(C[9]*mZcond.sq)
 }
 
-B<-Cort.age(New.age)
+A<-Cort.age(New.age)
 
-plot(New.age,B)
+plot(New.age,A)
+
+UnZcort.A <- (A*sd(Cort.Repro$cort))+mean(Cort.Repro$cort)
+print(UnZcort.A)
+
+UnZage<- (New.age*sd(Cort.Repro$age))+mean(Cort.Repro$age)
+print(UnZage)
+
+UnZage.sq <- UnZage^2
+
+Age.DF <- as.data.frame(cbind(A, New.age,
+                              UnZcort.A,UnZage,
+                              Cort.Repro$cort, Cort.Repro$age))
+
+ggplot(data = Age.DF, aes(New.age,A))+
+  geom_line(lwd=1.2)
+
+ggplot(data = Age.DF, aes(UnZage,UnZcort))+
+  geom_line()
+
+ggplot(data = Age.DF, aes(UnZage,UnZcort.A))+
+  geom_line(lwd=1.2)+
+  geom_jitter(aes(V6,V5), size=2, alpha=0.3, width = 0.15)+
+  ylab("Hair cortisol")+
+  xlab("Bear Age")+
+  scale_y_continuous(limits = c(0,35))
+
+ggplot(data = Age.DF, aes(UnZage,UnZcort.A))+
+  geom_line(lwd=1.2)+
+  geom_jitter(aes(V6,V5), size=2, alpha=0.3, width = 0.15)+
+  ylab("Hair cortisol")+
+  xlab("Bear Age")+
+  scale_y_continuous(limits = c(0,15))
+
+
+```
+
+
+### Condition
+
+```{r}
 
 Cort.cond <-function(x){
   C[1]+
     C[2]*mZyr+
-    C[3]*mZage+C[4]*mZage.sq+
+    (C[3]*mZage)+(C[4]*mZage^2)+
     C[5]*mZncubs+
     C[6]*mZ13C+
     C[7]*mZ15N+
     C[8]*New.cond+C[9]*(New.cond^2)
 }
+CC <- Cort.cond(New.cond)
+print(CC)
+UnZcort.C <- (CC*sd(Cort.Repro$cort))+mean(Cort.Repro$cort)
+print(UnZcort.C)
 
-C <- Cort.cond(New.cond)
+UnZcond<- (New.cond*sd(Cort.Repro$condition))+mean(Cort.Repro$condition)
+print(UnZcond)
 
-plot(New.cond,C)
+Cond.DF <- as.data.frame(cbind(CC, New.cond,
+                              UnZcort.C,UnZcond,
+                              Cort.Repro$cort, Cort.Repro$condition))
+
+ggplot(data = Cond.DF, aes(New.cond,CC))+
+  geom_line(lwd=1.2)
+
+ggplot(data = Cond.DF, aes(UnZcond,UnZcort.C))+
+  geom_line(lwd=1.2)+
+  geom_point(aes(V6,V5), size=2, alpha=0.3)+
+  ylab("Hair cortisol")+
+  xlab("Bear Body Condition")+
+  scale_y_continuous(limits = c(0,35))
+
+ggplot(data = Cond.DF, aes(UnZcond,UnZcort.C))+
+  geom_line(lwd=1.2)+
+  geom_point(aes(V6,V5), size=2, alpha=0.3)+
+  ylab("Hair cortisol")+
+  xlab("Bear Body Condition")+
+  scale_y_continuous(limits = c(0,15))
 
 ```
 
+
+### Litter Size
+
+```{r}
+
+Cort.Ncubs <-function(x){
+  C[1]+
+    C[2]*mZyr+
+    (C[3]*mZage)+(C[4]*mZage^2)+
+    C[5]*New.ncubs+
+    C[6]*mZ13C+
+    C[7]*mZ15N+
+    C[8]*mZcond+C[9]*(mZcond^2)
+}
+LS <- Cort.Ncubs(New.ncubs)
+print(LS)
+UnZcort.LS <- (LS*sd(Cort.Repro$cort))+mean(Cort.Repro$cort)
+print(UnZcort.LS)
+
+UnZncubs<- (New.ncubs*sd(Cort.Repro$cubsfirstcount))+
+  mean(Cort.Repro$cubsfirstcount)
+print(UnZncubs)
+
+Litter.DF <- as.data.frame(cbind(LS, New.ncubs,
+                              UnZcort.LS,UnZncubs,
+                              Cort.Repro$cort, Cort.Repro$cubsfirstcount))
+
+ggplot(data = Litter.DF, aes(New.ncubs,LS))+
+  geom_line(lwd=1.2)
+
+ggplot(data = Litter.DF, aes(UnZncubs,UnZcort.LS))+
+  geom_line(lwd=1.2)+
+  geom_jitter(aes(V6,V5), size=2, alpha=0.3,width = 0.15)+
+  ylab("Hair cortisol")+
+  xlab("Litter Size")+
+  scale_y_continuous(limits = c(0,35))
+
+```
+
+
+
+### Carbon
+
+```{r}
+
+Cort.d13C <-function(x){
+  C[1]+
+    C[2]*mZyr+
+    (C[3]*mZage)+(C[4]*mZage^2)+
+    C[5]*mZncubs+
+    C[6]*New.13C+
+    C[7]*mZ15N+
+    C[8]*mZcond+C[9]*(mZcond^2)
+}
+dC <- Cort.d13C(New.13C)
+print(dC)
+UnZcort.dC <- (dC*sd(Cort.Repro$cort))+mean(Cort.Repro$cort)
+print(UnZcort.dC)
+
+UnZd13C<- (New.13C*sd(Cort.Repro$C13.suess))+
+  mean(Cort.Repro$C13.suess)
+print(UnZd13C)
+
+d13C.DF <- as.data.frame(cbind(dC, New.13C,
+                              UnZcort.dC,UnZd13C,
+                              Cort.Repro$cort,Cort.Repro$C13.suess))
+
+ggplot(data = Litter.DF, aes(New.13C,dC))+
+  geom_line(lwd=1.2)
+
+ggplot(data = d13C.DF, aes(UnZd13C,UnZcort.dC))+
+  geom_line(lwd=1.2)+
+  geom_point(aes(V6,V5), size=2, alpha=0.3)+
+  ylab("Hair cortisol")+
+  xlab("d13C")+
+  scale_y_continuous(limits = c(0,35))
+
+ggplot(data = d13C.DF, aes(UnZd13C,UnZcort.dC))+
+  geom_line(lwd=1.2)+
+  geom_point(aes(V6,V5), size=2, alpha=0.3)+
+  ylab("Hair cortisol")+
+  xlab("d13C")+
+  scale_y_continuous(limits = c(0,15))
+
+```
+
+
+### Nitrogen
+
+```{r}
+
+Cort.d15N <-function(x){
+  C[1]+
+    C[2]*mZyr+
+    (C[3]*mZage)+(C[4]*mZage^2)+
+    C[5]*mZncubs+
+    C[6]*mZ13C+
+    C[7]*New.15N+
+    C[8]*mZcond+C[9]*(mZcond^2)
+}
+dN <- Cort.d15N(New.15N)
+print(dN)
+UnZcort.dN <- (dN*sd(Cort.Repro$cort))+mean(Cort.Repro$cort)
+print(UnZcort.dN)
+
+UnZd15N<- (New.15N*sd(Cort.Repro$N15))+
+  mean(Cort.Repro$N15)
+print(UnZd15N)
+
+d15N.DF <- as.data.frame(cbind(dN, New.15N,
+                              UnZcort.dN,UnZd15N,
+                              Cort.Repro$cort,Cort.Repro$N15))
+
+ggplot(data = d15N.DF, aes(New.15N,dN))+
+  geom_line(lwd=1.2)
+
+ggplot(data = d15N.DF, aes(UnZd15N,UnZcort.dN))+
+  geom_line(lwd=1.2)+
+  geom_point(aes(UnZd15N,V5), size=2, alpha=0.3)+
+  ylab("Hair cortisol")+
+  xlab("d15N")+
+  scale_y_continuous(limits = c(0,35))
+
+ggplot(data = d15N.DF, aes(UnZd15N,UnZcort.dN))+
+  geom_line(lwd=1.2)+
+  geom_point(aes(V6,V5), size=2, alpha=0.3)+
+  ylab("Hair cortisol")+
+  xlab("d15N")+
+  scale_y_continuous(limits = c(0,17))
+
+```
