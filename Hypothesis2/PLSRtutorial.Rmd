@@ -1,0 +1,292 @@
+---
+title: "PLSR tutorial"
+author: "Ashlee Mikkelsen"
+date: '2022-10-14'
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Intro
+In this file I follow a PLSR tutorial by Bertrand *et al*., 2020 
+
+https://fbertran.github.io/plsRglm/
+
+
+# Setup
+
+```{r}
+rm(list=ls())
+
+setwd("~/Rprojects/Diet-and-reproduction-in-rown-bears/Hypothesis2")
+```
+
+
+##load libraries
+```{r}
+library(plsRglm)
+library(ggplot2)
+library(wiqid)
+library(plsdof)
+
+```
+
+## set graph theme
+```{r}
+mytheme <- theme(
+    axis.text = element_text(size = 18,face = "bold"),
+    axis.title = element_text(size = 20, face = "bold"),
+    panel.grid.major = element_line(color = "grey92"),
+    panel.grid.minor = element_line(color = "grey96"),
+    panel.background = element_rect(fill = "white"),
+    axis.line = element_line(colour = "black",size = 1),
+    axis.ticks = element_line(size = 1),
+    )
+theme_set(mytheme)
+```
+
+### create data table
+```{r}
+HP2.dat <- read.csv("BearReproData_H2Analysis.csv")
+
+Cort.Repro <- HP2.dat[,c(13,3,6,10,11,12,14,15,16,22,23,26,28)]
+Cort.Repro <- subset(Cort.Repro, reprocat!="Wmother")
+Cort.Repro$conditionsq <- Cort.Repro$condition^2
+Cort.Repro$age2<-Cort.Repro$age^2
+
+colSums(is.na(Cort.Repro))
+
+ggplot(data = Cort.Repro, aes(cort))+
+  geom_histogram(binwidth = sd(Cort.Repro$cort)*0.5)
+
+```
+
+
+### standardize cont. vars
+```{r}
+Zcort <- standardize(Cort.Repro$cort)
+Zyr <- standardize(Cort.Repro$year)
+Zage <- standardize(Cort.Repro$age)
+Zage.sq <- standardize(Cort.Repro$age2)
+Zncubs <- standardize(Cort.Repro$cubsfirstcount)
+Z13C<-standardize(Cort.Repro$C13.suess)
+Z15N <- standardize(Cort.Repro$N15)
+Zcond <- standardize(Cort.Repro$condition)
+Zcond.sq <- standardize(Cort.Repro$conditionsq)
+```
+
+
+### Creat model DF
+```{r}
+DF.model <- as.data.frame(cbind(Zyr,Zage,Zage.sq,Zncubs,Z13C,
+                                Z15N,Zcond,Zcond.sq,Zcort))
+
+```
+
+# Run Models
+
+## first model
+
+```{r}
+cv.modpls<-cv.plsR(Zcort~.,
+                   data=DF.model,
+                   nt=10,K=6)
+
+res.cv.modpls<-cvtable(summary(cv.modpls))
+
+```
+
+## second model
+
+```{r}
+res6<-plsR(Zcort~.,
+           data=DF.model,
+           nt=6, typeVC="standard", pvals.expli=TRUE)
+
+colSums(res6$pvalstep)
+
+res6$InfCrit
+
+cv.modpls<-cv.plsR(Zcort~.,
+                   data=DF.model
+                   ,nt=10,K=6,NK=200,
+                   random=TRUE,verbose = FALSE)
+
+res.cv.modpls=cvtable(summary(cv.modpls))
+
+plot(res.cv.modpls)
+
+```
+
+
+# Fot the model with 1 component to obtain regression coefficients
+
+```{r}
+
+res<-plsR(Zcort~.,
+          data= DF.model,nt=1,
+          pvals.expli=TRUE)
+res
+
+res$wwetoile
+
+biplot(res6$tt,res6$pp)
+
+modpls2 <- plsR(Zcort~.,
+                data= DF.model,
+                6,sparse=TRUE)
+
+modpls3 <- plsR(Zcort ~.,
+                data=DF.model,6,
+                sparse=TRUE,sparseStop=FALSE)
+
+```
+
+# Bootstrapping
+
+```{r}
+
+MvarRepro.bootYX1=bootpls(res,R=5000,verbose=FALSE)
+
+boxplots.bootpls(MvarRepro.bootYX1,indice=2:9)
+
+temp.ci=confints.bootpls(MvarRepro.bootYX1,indice=2:9)
+plots.confints.bootpls(temp.ci,typeIC="BCa",colIC=c("blue","blue","blue","blue"), legendpos ="topright")
+
+plot(MvarRepro.bootYX1,index=2,jack=TRUE)
+
+car::dataEllipse(MvarRepro.bootYX1$t[,2], MvarRepro.bootYX1$t[,3], cex=.3, levels=c(.5, .95, .99), robust=T, xlab="X2", ylab="X3")
+
+```
+
+Using another method of bootstrapping to compare
+
+```{r}
+MvarRepro.bootYT1=bootpls(res,typeboot="fmodel_np",R=1000)
+
+boxplots.bootpls(MvarRepro.bootYT1,indices=2:9)
+
+temp.ci=confints.bootpls(MvarRepro.bootYT1,indices=2:9)
+plots.confints.bootpls(temp.ci,typeIC="BCa",colIC=c("blue","blue","blue","blue"), legendpos ="topright")
+
+```
+
+
+```{r}
+
+res2<-plsR(Zcort~.,
+           data= DF.model,nt=2)
+
+MvarRepro.bootYT2=bootpls(res2,typeboot="fmodel_np",R=1000)
+temp.ci2<-confints.bootpls(MvarRepro.bootYT2,indices=2:9)
+
+ind.BCa.MvarReproYT1 <- (temp.ci[,7]<0&temp.ci[,8]<0)|(temp.ci[,7]>0&temp.ci[,8]>0)
+
+ind.BCa.MvarReproYT2 <- (temp.ci2[,7]<0&temp.ci2[,8]<0)|(temp.ci2[,7]>0&temp.ci2[,8]>0)
+
+(matind=(rbind(YT1=ind.BCa.MvarReproYT1,YT2=ind.BCa.MvarReproYT2)))
+
+res2
+
+C <- res2$Coeffs
+C
+
+```
+
+
+# Interrpreting output
+Does it make biological sense
+
+## Find means for each covariate
+They should be zero, but...
+```{r}
+mZyr <- mean(Zyr)
+mZage <- mean(Zage)
+mZage.sq <- mean(Zage.sq)
+mZncubs <- mean(Zncubs)
+mZ13C <- mean(Z13C)
+mZ15N <- mean(Z15N)
+mZcond <-mean(Zcond)
+mZcond.sq <- mean(Zcond.sq)
+
+```
+
+
+## Create new data
+```{r}
+
+New.cort <- seq(min(Zcort),max(Zcort), length.out=200 )
+New.yr <- seq(min(Zyr),max(Zyr), length.out=200)
+New.age <- seq(min(Zage),max(Zage), length.out=200)
+New.age.sq <-New.age^2
+New.ncubs <- seq(min(Zncubs),max(Zncubs), length.out=200)
+New.13C <- seq(min(Z13C),max(Z13C), length.out=200)
+New.15N <- seq(min(Z15N),max(Z15N), length.out=200)
+New.cond <- seq(min(Zcond),max(Zcond), length.out=200)
+New.cond.sq <- New.cond^2
+
+```
+
+
+
+The regression model is:
+
+Zcort~b0+b1xZyr+b2xZage+b3xZage.sq+b4xZncubs+b5xZ13C+b6xZ15N+b7xZcond+b8xZcond.sq
+
+To look at the relationship between CORT and any given factor, I need to hold all others at their means
+
+## Specific covariate outputs
+
+### year
+```{r}
+Cort.Yr <- function(x){
+  C[1]+C[2]*x+C[3]*mZage+C[4]*mZage.sq+C[5]*mZncubs+C[6]*mZ13C+C[7]*mZ15N+
+    C[8]*mZcond+C[9]*mZcond.sq
+}
+A <- Cort.Yr(New.yr)
+plot(New.yr,A)
+
+UnZcort <- A*
+
+
+Year.DF <- as.data.frame(cbind(A, New.yr))
+
+ggplot(data = Year.DF, aes(New.yr,A))+
+  geom_line(lwd=1.2)
+
+```
+
+
+```{r}
+Cort.age <-  function(x){
+  C[1]+
+    C[2]*mZyr+
+    C[3]*New.age+C[4]*(New.age^2)+
+    C[5]*mZncubs+
+    C[6]*mZ13C+
+    C[7]*mZ15N+
+    C[8]*mZcond+C[9]*mZcond.sq
+}
+
+B<-Cort.age(New.age)
+
+plot(New.age,B)
+
+Cort.cond <-function(x){
+  C[1]+
+    C[2]*mZyr+
+    C[3]*mZage+C[4]*mZage.sq+
+    C[5]*mZncubs+
+    C[6]*mZ13C+
+    C[7]*mZ15N+
+    C[8]*New.cond+C[9]*(New.cond^2)
+}
+
+C <- Cort.cond(New.cond)
+
+plot(New.cond,C)
+
+```
+
