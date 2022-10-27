@@ -1,0 +1,302 @@
+---
+title: "Reproduction PCA analysis"
+author: "Ashlee Mikkelsen"
+date: '2022-10-13'
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Intro
+Trying to figure out how to a partial least squares regression has been challenging because most tutorials have you run a model and determine the number of components, then use a training and test dataset to test your model, with no further explanation of graphical output or interpreting the model output to answer larger questions. So I decided to take a step back and first complete a prinicpal components analysis following this tutorial:
+
+https://bayesbaes.github.io/2021/01/28/PCA-tutorial.html
+
+and then move on to a partial least squares regression
+
+This is another website that does very well at explaining PCA:
+https://strata.uga.edu/8370/lecturenotes/principalComponents.html
+
+
+# Setup and data prep
+
+## set WD
+
+```{r}
+rm(list=ls())
+#setwd("~/Rprojects/Diet-and-reproduction-in-rown-bears/Hypothesis2")
+```
+
+## Load packages
+```{r}
+library(ggplot2)
+library(GGally)
+library(wiqid)
+library(jagsUI)
+library(rjags)
+library(viridis)
+library(MCMCvis) # for summarizing MCMC output
+library(mcmcplots) # for plotting MCMC output
+library(patchwork) # for multi-panel plots
+library(ggfortify)
+library(tidyr)
+```
+
+
+## set graph theme
+```{r}
+mytheme <- theme(
+    axis.text = element_text(size = 18,face = "bold"),
+    axis.title = element_text(size = 20, face = "bold"),
+    panel.grid.major = element_line(color = "grey92"),
+    panel.grid.minor = element_line(color = "grey96"),
+    panel.background = element_rect(fill = "white"),
+    axis.line = element_line(colour = "black",size = 1),
+    axis.ticks = element_line(size = 1),
+    )
+theme_set(mytheme)
+```
+
+## data
+
+### create data table
+```{r}
+HP2.dat <- read.csv("BearReproData_H2Analysis.csv")
+
+Cort.Repro <- HP2.dat[,c(13,3,6,10,11,12,14,15,16,22,23,26,28)]
+Cort.Repro <- subset(Cort.Repro, reprocat!="Wmother")
+Cort.Repro$conditionsq <- Cort.Repro$condition^2
+Cort.Repro$age2<-Cort.Repro$age^2
+
+colSums(is.na(Cort.Repro))
+
+ggplot(data = Cort.Repro, aes(cort))+
+  geom_histogram(binwidth = sd(Cort.Repro$cort)*0.5)
+
+```
+
+
+### standardize cont. vars
+
+Because I have *standardized* rather than *centered* my variables, this means that I am doing an analysis of correlations rather than covariances
+```{r}
+Zcort <- standardize(Cort.Repro$cort)
+Zyr <- standardize(Cort.Repro$year)
+Zage <- standardize(Cort.Repro$age)
+Zage.sq <- standardize(Cort.Repro$age2)
+Zncubs <- standardize(Cort.Repro$cubsfirstcount)
+Z13C<-standardize(Cort.Repro$C13.suess)
+Z15N <- standardize(Cort.Repro$N15)
+Zcond <- standardize(Cort.Repro$condition)
+Zcond.sq <- standardize(Cort.Repro$conditionsq)
+```
+
+
+### Create model DF
+```{r}
+DF.model <- as.data.frame(cbind(Zyr,Zage,Zage.sq,Zncubs,Z13C,
+                                  Z15N,Zcond,Zcond.sq,Zcort
+))
+
+```
+
+# Do the PCA
+```{r}
+pca_values <- prcomp(DF.model)
+
+summary(pca_values)
+Eigenvectors <- pca_values$rotation
+print(Eigenvectors)
+VarOfScores <- pca_values$sdev^2
+print(VarOfScores)
+scores <- pca_values$x
+print(scores)
+
+```
+
+When I use the command summary(), I get the eigen*values*.
+
+Because I standerdized my variables, the rotation column gives me the variables correlated with principal component 1. I am interested in variables with the highest values
+
+```{r}
+print(Eigenvectors)
+
+```
+For PC1, age, age sq, litter size, condition, and condition squared have the highest values (all negative and range from 0.4 to 0.47). This can also be seen by the graph below.
+
+
+
+## Correlation between vars and prin. comp.
+
+To calculate the correlation between an original variable and a principal component. The correlation between of the original variables $X_i$ and principal component $Y_j$ is
+$$
+
+r_{ij} = \sqrt{a^2_{ij}*var(Y_j)/s_{ii}}
+
+
+$$
+where $\alpha_{ij}$ is the *i*th's varaible principal component weight on principal component *j* and $Y_{j}$ is the *j*th principal component score.
+
+$var(Y_j)$ is the variance of the principal. 
+
+or 
+$$
+
+r = v_{ij} *\frac{std(Y_j)}{std(X_i)} = v_{ij} * \frac{\sqrt{e_j}}{std(X_i)}
+$$
+where $v_{ij}$ is an *i*th element of the *j*th unit-length eigenvector of the covariance matrix, $e_j=var(Y_j)$ is the corresponding eigenvalue which gives variance of this principal component and $std(X_i)$ is the standard deviation of $X_i$.
+
+## PCA Loadings
+
+The second part of the equation on the right side of the *=* are the "*loadings*" ($L_{ij}$)
+
+$\alpha_{ij}$ are the elements of the eigenvectors, $var(Y_i)$ are the respective eigenvalues, and $s_{ii}$ stands for the diagonal elements of the *original* covariance matrix, i.e. $var(X_i)$
+
+The "*loadings*" are the correlations between PCs and factors.
+
+$Loadings = Eigenvectors * \sqrt{Eigenvalues}$
+
+Loadings are the linear combination weights (*coefficients*). In a PCA, you split the matrix into a *scale* part (eigen*values*) and a direction part (eigen*vectors*)
+
+The eigen*vector* is just a coefficient of orthogonal transformation or projection. IT IS DEVOID OF *LOAD* WITHIN ITS VALUE. *Load* is information information regarding the variance and magnitude. These are essentially unit-scaled loadings and they are the coefficients (cosines) of orthogonal transformation (rotation) variables. An eigenvector value *squared* is the contribution of a variable into a principal component . If it is high (close to 1) the component is well-defined by that variable alone.
+
+The eigen*values* are the variance of (variance explained *by*) principal components. Therefore, when we multiply the eigen*vector* by the square root or the eigen*value*, we "*load*" the bare coefficient by the amount of variance and make the coefficient to be a measure of association or co-variability.
+
+
+
+
+# graph the PCA
+```{r}
+autoplot(pca_values, loadings = TRUE, loadings.label = TRUE)
+
+```
+
+So far, I heart this tutorial. So straight forward and helpful. 
+
+## Let's explain this graph
+Each line is a vector, which has a magnitude and direction. The size (length) of the arrow denotes the magnitude. Notice the difference between $\delta$ 13C and $\delta$ 15N. Each of these vectors is an *eigenvector*. The default is PCA 1 ~ PCA2, but this can be specified. 
+
+To interpret this: Arrows with similar lengths and directions are more correlated than very different arrows. 
+
+The direction and magnitude also tells you how much that variable *loads* on that axis. Consider Zncubs, which points to the left of the graph. This tells us that decreasing values of PCA 1 equate to larger values of Zncubs. This is also true for PCA 2 because the line is sloped down, but the relationship is less strong. 
+
+Because this graph exists in non-dimensional space, the spatial arrangement and clustering of points matters. We can see this if we color the points.
+
+
+# Tying the PCA to other analysis
+
+The first step is to combine the PCA values to the rest of the data
+
+```{r}
+
+pca_points <- 
+  # first convert the pca results to a tibble
+  as.data.frame(pca_values$x)
+  # now we'll add the bear data
+pca_points <- cbind(Cort.Repro,pca_points)
+
+head(pca_points)
+
+pc1_mod <- 
+  lm(PC1 ~ reprocat, pca_points)
+
+summary(pc1_mod)
+
+pca_points<-as.data.frame(cbind(pca_points,DF.model))
+
+ggplot(data = pca_points, aes(PC1, Zcort))+
+  geom_point(size=3, alpha=0.4)
+
+ggplot(data = pca_points, aes(PC2, Zcort))+
+  geom_point(size=3, alpha=0.4)
+
+ggplot(data = pca_points, aes(PC3, Zcort))+
+  geom_point(size=3, alpha=0.4)
+
+
+```
+
+
+# Creating PCA graphs for publication
+
+```{r}
+
+ggplot(pca_points, aes(x = PC1, y = PC2)) +
+  geom_point(aes(colour = statut), size=3, alpha=0.8)+
+  scale_color_viridis(discrete = TRUE, end = 0.85)
+
+ggplot(pca_points, aes(x = PC1, y = PC2)) +
+  geom_point(aes(colour = reprocat), size=3, alpha=0.8)+
+  scale_color_viridis(discrete = TRUE, end = 0.85)
+
+pca_points$fYR <- as.factor(pca_points$year)
+
+ggplot(pca_points, aes(x = PC1, y = PC2)) +
+  geom_point(aes(colour = fYR), size=3, alpha=0.8)+
+  scale_color_viridis(discrete = TRUE, end = 0.9)
+
+```
+
+## adding convex hulls
+
+```{r}
+
+library(dplyr)
+
+PCA_hull.RC <- pca_points %>%
+  group_by(reprocat) %>%
+  slice(chull(PC1,PC2))
+
+
+ggplot(pca_points, aes(x = PC1, y = PC2)) +
+  geom_point(aes(colour = reprocat), size=3, alpha=0.8)+
+  scale_color_viridis(discrete = TRUE, end = 0.85)+
+  geom_polygon(data = PCA_hull.RC, aes(fill= reprocat, colour=reprocat),
+               alpha=0.3, show.legend = FALSE)+
+  scale_fill_viridis(discrete = TRUE, end = 0.85)
+
+
+PCA_hull.YR <- pca_points %>%
+  group_by(fYR) %>%
+  slice(chull(PC1,PC2))
+
+
+ggplot(pca_points, aes(x = PC1, y = PC2)) +
+  geom_point(aes(colour = fYR), size=3, alpha=0.8)+
+  scale_color_viridis(discrete = TRUE, end = 0.85)+
+  geom_polygon(data = PCA_hull.YR, aes(fill= fYR, colour=fYR),
+               alpha=0.1, show.legend = FALSE)+
+  scale_fill_viridis(discrete = TRUE, end = 0.85)
+
+```
+
+## Adding eigenvectors back to plot space
+
+```{r}
+Vnames <- c("Year","Age","Age sq.","NumCubs","d13C","d15N","Condition",
+            "Condition sq.", "CORT")
+
+pca_load <- 
+  as.data.frame(cbind(Vnames,pca_values$rotation, row.names = "variable") )
+pca_load$PC1 <- as.numeric(pca_load$PC1)
+pca_load$PC2 <- as.numeric(pca_load$PC2)
+
+ggplot(pca_points, aes(x = PC1, y = PC2)) +
+  geom_polygon(data = PCA_hull, aes(fill= reprocat, colour=reprocat),
+               alpha=0.3, show.legend = FALSE)+
+  scale_fill_viridis(discrete = TRUE, end = 0.85)+
+  geom_point(aes(colour = reprocat), size=3, alpha=0.8)+
+  scale_color_viridis(discrete = TRUE, end = 0.85)+
+  geom_segment(data = pca_load, 
+               aes(x = 0, y = 0, 
+                   xend = PC1*5,
+                   yend = PC2*5),
+               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.2) +
+  annotate('text', x = (pca_load$PC1*6.3), y = (pca_load$PC2*6.6),
+           label = pca_load$Vnames,
+           size = 5) 
+
+```
+
