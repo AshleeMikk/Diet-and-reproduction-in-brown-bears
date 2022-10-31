@@ -24,13 +24,13 @@ https://strata.uga.edu/8370/lecturenotes/principalComponents.html
 
 ## set WD
 
-```{r}
+```{r, include=FALSE}
 rm(list=ls())
-#setwd("~/Rprojects/Diet-and-reproduction-in-rown-bears/Hypothesis2")
+setwd("~/Rprojects/Diet-and-reproduction-in-rown-bears/Hypothesis2")
 ```
 
 ## Load packages
-```{r}
+```{r, include=FALSE}
 library(ggplot2)
 library(GGally)
 library(wiqid)
@@ -42,11 +42,12 @@ library(mcmcplots) # for plotting MCMC output
 library(patchwork) # for multi-panel plots
 library(ggfortify)
 library(tidyr)
+library(kableExtra)
 ```
 
 
 ## set graph theme
-```{r}
+```{r, include=FALSE}
 mytheme <- theme(
     axis.text = element_text(size = 18,face = "bold"),
     axis.title = element_text(size = 20, face = "bold"),
@@ -62,16 +63,21 @@ theme_set(mytheme)
 ## data
 
 ### create data table
-```{r}
+For this PCA, I imported my original repro data .csv and retained only the continuous variables, and retained only independent females. I also removed 3 outliers per advise from several tutorials.
+```{r, include=FALSE}
 HP2.dat <- read.csv("BearReproData_H2Analysis.csv")
 
 Cort.Repro <- HP2.dat[,c(13,3,6,10,11,12,14,15,16,22,23,26,28)]
 Cort.Repro <- subset(Cort.Repro, reprocat!="Wmother")
+Cort.Repro <- subset(Cort.Repro,cort<20)
 Cort.Repro$conditionsq <- Cort.Repro$condition^2
 Cort.Repro$age2<-Cort.Repro$age^2
 
 colSums(is.na(Cort.Repro))
+```
 
+
+```{r, fig.height=8, fig.width=12, fig.cap="distribution of brown bear hair cortisol values"}
 ggplot(data = Cort.Repro, aes(cort))+
   geom_histogram(binwidth = sd(Cort.Repro$cort)*0.5)
 
@@ -80,9 +86,10 @@ ggplot(data = Cort.Repro, aes(cort))+
 
 ### standardize cont. vars
 
-Because I have *standardized* rather than *centered* my variables, this means that I am doing an analysis of correlations rather than covariances
-```{r}
-Zcort <- standardize(Cort.Repro$cort)
+Because I have *standardized* rather than *centered* my variables, this means that I am doing an analysis of correlations rather than covariances. In addition, to meet the assumptions of normality, I log transformed the cortisol values prior to transforming them.
+```{r, include=FALSE}
+lnCORT <- log(Cort.Repro$cort)
+Zcort <- standardize(lnCORT)
 Zyr <- standardize(Cort.Repro$year)
 Zage <- standardize(Cort.Repro$age)
 Zage.sq <- standardize(Cort.Repro$age2)
@@ -95,7 +102,7 @@ Zcond.sq <- standardize(Cort.Repro$conditionsq)
 
 
 ### Create model DF
-```{r}
+```{r, include=FALSE}
 DF.model <- as.data.frame(cbind(Zyr,Zage,Zage.sq,Zncubs,Z13C,
                                   Z15N,Zcond,Zcond.sq,Zcort
 ))
@@ -113,12 +120,29 @@ VarOfScores <- pca_values$sdev^2
 print(VarOfScores)
 scores <- pca_values$x
 print(scores)
+```
+
+## Determine how many components to retain
+
+I will compare the percent of varaince explained by each component and compare that to the loss of explaining power as compoinents are added and the percent variation explained relative to the expected, equal worth of all variables.
+
+The explained variance of each PC was used, plus their combined explained variance, which included 4 components. The first 4 components explained 85% of the variation in the data.
+```{r}
+varPercent <- VarOfScores/sum(VarOfScores)*100
+
+barplot(varPercent, xlab='PC', ylab='Percent Variance', names.arg=1:length(varPercent), las=1, ylim=c(0, max(varPercent)), col='gray')
+abline(h=1/ncol(Cort.Repro)*100, col='red')
+
+varPercent[1:4]
+sum(varPercent[1:4]) 
 
 ```
 
+
+
 When I use the command summary(), I get the eigen*values*.
 
-Because I standerdized my variables, the rotation column gives me the variables correlated with principal component 1. I am interested in variables with the highest values
+Because I standardized my variables, the rotation column gives me the variables correlated with principal component 1. I am interested in variables with the highest values
 
 ```{r}
 print(Eigenvectors)
@@ -164,6 +188,19 @@ The eigen*vector* is just a coefficient of orthogonal transformation or projecti
 
 The eigen*values* are the variance of (variance explained *by*) principal components. Therefore, when we multiply the eigen*vector* by the square root or the eigen*value*, we "*load*" the bare coefficient by the amount of variance and make the coefficient to be a measure of association or co-variability.
 
+## Variable contribution to PCs (via Loadings)
+Positive loadings indicate a variable and a principal component are positively correlated while negative loadings indicate a negative correlation. Large loadings indicate that a variable has a strong effect on that principal component.I need a criterion of what constitutes a “large” loading. Because the sum of the squares of all loadings for an individual principal component must sum to one, we can calculate what the loadings would be if all variables contributed equally to that principal component. Any variable that has a larger loading than this value contributes more than one variable’s worth of information and would be regarded as an important contributor to that principal component.
+
+```{r}
+Eigenvectors
+sqrt(1/ncol(Cort.Repro)) # cutoff for 'important' loadings 
+
+X <- Eigenvectors[,1:4]
+knitr::kable(X, "simple", digits = 3,
+             caption = "Loading of first 4 PCs",
+             booktabs=TRUE)
+
+```
 
 
 
@@ -283,12 +320,18 @@ pca_load <-
 pca_load$PC1 <- as.numeric(pca_load$PC1)
 pca_load$PC2 <- as.numeric(pca_load$PC2)
 
+
+PCA_hull.RC <- pca_points %>%
+  group_by(reprocat) %>%
+  slice(chull(PC1,PC2))
+
+
 ggplot(pca_points, aes(x = PC1, y = PC2)) +
-  geom_polygon(data = PCA_hull, aes(fill= reprocat, colour=reprocat),
+  geom_polygon(data = PCA_hull.RC, aes(fill= reprocat, colour=reprocat),
                alpha=0.3, show.legend = FALSE)+
-  scale_fill_viridis(discrete = TRUE, end = 0.85)+
+  scale_fill_viridis(discrete = TRUE, end = 0.90)+
   geom_point(aes(colour = reprocat), size=3, alpha=0.8)+
-  scale_color_viridis(discrete = TRUE, end = 0.85)+
+  scale_color_viridis(discrete = TRUE, end = 0.90)+
   geom_segment(data = pca_load, 
                aes(x = 0, y = 0, 
                    xend = PC1*5,
