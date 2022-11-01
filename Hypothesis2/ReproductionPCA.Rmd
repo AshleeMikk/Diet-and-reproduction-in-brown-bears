@@ -3,6 +3,9 @@ title: "Reproduction PCA analysis"
 author: "Ashlee Mikkelsen"
 date: '2022-10-13'
 output: word_document
+editor_options: 
+  markdown: 
+    wrap: 72
 ---
 
 ```{r setup, include=FALSE}
@@ -10,15 +13,21 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 # Intro
-Trying to figure out how to a partial least squares regression has been challenging because most tutorials have you run a model and determine the number of components, then use a training and test dataset to test your model, with no further explanation of graphical output or interpreting the model output to answer larger questions. So I decided to take a step back and first complete a prinicpal components analysis following this tutorial:
 
-https://bayesbaes.github.io/2021/01/28/PCA-tutorial.html
+Trying to figure out how to a partial least squares regression has been
+challenging because most tutorials have you run a model and determine
+the number of components, then use a training and test dataset to test
+your model, with no further explanation of graphical output or
+interpreting the model output to answer larger questions. So I decided
+to take a step back and first complete a prinicpal components analysis
+following this tutorial:
+
+<https://bayesbaes.github.io/2021/01/28/PCA-tutorial.html>
 
 and then move on to a partial least squares regression
 
 This is another website that does very well at explaining PCA:
-https://strata.uga.edu/8370/lecturenotes/principalComponents.html
-
+<https://strata.uga.edu/8370/lecturenotes/principalComponents.html>
 
 # Setup and data prep
 
@@ -30,6 +39,7 @@ setwd("~/Rprojects/Diet-and-reproduction-in-rown-bears/Hypothesis2")
 ```
 
 ## Load packages
+
 ```{r, include=FALSE}
 library(ggplot2)
 library(GGally)
@@ -45,8 +55,8 @@ library(tidyr)
 library(kableExtra)
 ```
 
-
 ## set graph theme
+
 ```{r, include=FALSE}
 mytheme <- theme(
     axis.text = element_text(size = 18,face = "bold"),
@@ -63,7 +73,11 @@ theme_set(mytheme)
 ## data
 
 ### create data table
-For this PCA, I imported my original repro data .csv and retained only the continuous variables, and retained only independent females. I also removed 3 outliers per advise from several tutorials.
+
+For this PCA, I imported my original repro data .csv and retained only
+the continuous variables, and retained only independent females. I also
+removed 3 outliers per advise from several tutorials.
+
 ```{r, include=FALSE}
 HP2.dat <- read.csv("BearReproData_H2Analysis.csv")
 
@@ -76,17 +90,19 @@ Cort.Repro$age2<-Cort.Repro$age^2
 colSums(is.na(Cort.Repro))
 ```
 
-
 ```{r, fig.height=8, fig.width=12, fig.cap="distribution of brown bear hair cortisol values"}
 ggplot(data = Cort.Repro, aes(cort))+
   geom_histogram(binwidth = sd(Cort.Repro$cort)*0.5)
 
 ```
 
-
 ### standardize cont. vars
 
-Because I have *standardized* rather than *centered* my variables, this means that I am doing an analysis of correlations rather than covariances. In addition, to meet the assumptions of normality, I log transformed the cortisol values prior to transforming them.
+Because I have *standardized* rather than *centered* my variables, this
+means that I am doing an analysis of correlations rather than
+covariances. In addition, to meet the assumptions of normality, I log
+transformed the cortisol values prior to transforming them.
+
 ```{r, include=FALSE}
 lnCORT <- log(Cort.Repro$cort)
 Zcort <- standardize(lnCORT)
@@ -100,8 +116,8 @@ Zcond <- standardize(Cort.Repro$condition)
 Zcond.sq <- standardize(Cort.Repro$conditionsq)
 ```
 
-
 ### Create model DF
+
 ```{r, include=FALSE}
 DF.model <- as.data.frame(cbind(Zyr,Zage,Zage.sq,Zncubs,Z13C,
                                   Z15N,Zcond,Zcond.sq,Zcort
@@ -110,6 +126,7 @@ DF.model <- as.data.frame(cbind(Zyr,Zage,Zage.sq,Zncubs,Z13C,
 ```
 
 # Do the PCA
+
 ```{r}
 pca_values <- prcomp(DF.model)
 
@@ -119,77 +136,106 @@ print(Eigenvectors)
 VarOfScores <- pca_values$sdev^2
 print(VarOfScores)
 scores <- pca_values$x
-print(scores)
+
 ```
 
 ## Determine how many components to retain
 
-I will compare the percent of varaince explained by each component and compare that to the loss of explaining power as compoinents are added and the percent variation explained relative to the expected, equal worth of all variables.
+I will compare the percent of variance explained by each component and
+compare that to the loss of explaining power as components are added and
+the percent variation explained relative to the expected, equal worth of
+all variables.
 
-The explained variance of each PC was used, plus their combined explained variance, which included 4 components. The first 4 components explained 85% of the variation in the data.
-```{r}
+The explained variance of each PC was used, plus their combined
+explained variance, which included 4 components. The first 4 components
+explained 85% of the variation in the data.
+
+```{r, include=FALSE}
 varPercent <- VarOfScores/sum(VarOfScores)*100
+```
 
-barplot(varPercent, xlab='PC', ylab='Percent Variance', names.arg=1:length(varPercent), las=1, ylim=c(0, max(varPercent)), col='gray')
+```{r, fig.height=8,fig.width=12, fig.cap="Variance explained by each component"}
+barplot(varPercent, xlab='PC', ylab='Percent Variance',
+        names.arg=1:length(varPercent), las=1, ylim=c(0, max(varPercent)),
+        col='gray')
 abline(h=1/ncol(Cort.Repro)*100, col='red')
+```
+
+```{r, fig.height=8,fig.width=12}
 
 varPercent[1:4]
 sum(varPercent[1:4]) 
 
 ```
 
-
-
-When I use the command summary(), I get the eigen*values*.
-
-Because I standardized my variables, the rotation column gives me the variables correlated with principal component 1. I am interested in variables with the highest values
-
-```{r}
-print(Eigenvectors)
-
-```
-For PC1, age, age sq, litter size, condition, and condition squared have the highest values (all negative and range from 0.4 to 0.47). This can also be seen by the graph below.
-
-
-
 ## Correlation between vars and prin. comp.
 
-To calculate the correlation between an original variable and a principal component. The correlation between of the original variables $X_i$ and principal component $Y_j$ is
-$$
+To calculate the correlation between an original variable and a
+principal component. The correlation between of the original variables
+$X_i$ and principal component $Y_j$ is \$\$
 
-r_{ij} = \sqrt{a^2_{ij}*var(Y_j)/s_{ii}}
+r\_{ij} = \sqrt{a^2_{ij}*var(Y_j)/s_{ii}}
 
+\$\$ where $\alpha_{ij}$ is the *i*th's varaible principal component
+weight on principal component *j* and $Y_{j}$ is the *j*th principal
+component score.
 
-$$
-where $\alpha_{ij}$ is the *i*th's varaible principal component weight on principal component *j* and $Y_{j}$ is the *j*th principal component score.
+$var(Y_j)$ is the variance of the principal.
 
-$var(Y_j)$ is the variance of the principal. 
+or \$\$
 
-or 
-$$
-
-r = v_{ij} *\frac{std(Y_j)}{std(X_i)} = v_{ij} * \frac{\sqrt{e_j}}{std(X_i)}
-$$
-where $v_{ij}$ is an *i*th element of the *j*th unit-length eigenvector of the covariance matrix, $e_j=var(Y_j)$ is the corresponding eigenvalue which gives variance of this principal component and $std(X_i)$ is the standard deviation of $X_i$.
+r = v\_{ij} \frac{std(Y_j)}{std(X_i)} = v\_{ij}
+\frac{\sqrt{e_j}}{std(X_i)} \$\$ where $v_{ij}$ is an *i*th element of
+the *j*th unit-length eigenvector of the covariance matrix,
+$e_j=var(Y_j)$ is the corresponding eigenvalue which gives variance of
+this principal component and $std(X_i)$ is the standard deviation of
+$X_i$.
 
 ## PCA Loadings
 
-The second part of the equation on the right side of the *=* are the "*loadings*" ($L_{ij}$)
+The second part of the equation on the right side of the *=* are the
+"*loadings*" ($L_{ij}$)
 
-$\alpha_{ij}$ are the elements of the eigenvectors, $var(Y_i)$ are the respective eigenvalues, and $s_{ii}$ stands for the diagonal elements of the *original* covariance matrix, i.e. $var(X_i)$
+$\alpha_{ij}$ are the elements of the eigenvectors, $var(Y_i)$ are the
+respective eigenvalues, and $s_{ii}$ stands for the diagonal elements of
+the *original* covariance matrix, i.e. $var(X_i)$
 
 The "*loadings*" are the correlations between PCs and factors.
 
 $Loadings = Eigenvectors * \sqrt{Eigenvalues}$
 
-Loadings are the linear combination weights (*coefficients*). In a PCA, you split the matrix into a *scale* part (eigen*values*) and a direction part (eigen*vectors*)
+Loadings are the linear combination weights (*coefficients*). In a PCA,
+you split the matrix into a *scale* part (eigen*values*) and a direction
+part (eigen*vectors*)
 
-The eigen*vector* is just a coefficient of orthogonal transformation or projection. IT IS DEVOID OF *LOAD* WITHIN ITS VALUE. *Load* is information information regarding the variance and magnitude. These are essentially unit-scaled loadings and they are the coefficients (cosines) of orthogonal transformation (rotation) variables. An eigenvector value *squared* is the contribution of a variable into a principal component . If it is high (close to 1) the component is well-defined by that variable alone.
+The eigen*vector* is just a coefficient of orthogonal transformation or
+projection. IT IS DEVOID OF *LOAD* WITHIN ITS VALUE. *Load* is
+information information regarding the variance and magnitude. These are
+essentially unit-scaled loadings and they are the coefficients (cosines)
+of orthogonal transformation (rotation) variables. An eigenvector value
+*squared* is the contribution of a variable into a principal component .
+If it is high (close to 1) the component is well-defined by that
+variable alone.
 
-The eigen*values* are the variance of (variance explained *by*) principal components. Therefore, when we multiply the eigen*vector* by the square root or the eigen*value*, we "*load*" the bare coefficient by the amount of variance and make the coefficient to be a measure of association or co-variability.
+The eigen*values* are the variance of (variance explained *by*)
+principal components. Therefore, when we multiply the eigen*vector* by
+the square root or the eigen*value*, we "*load*" the bare coefficient by
+the amount of variance and make the coefficient to be a measure of
+association or co-variability.
 
 ## Variable contribution to PCs (via Loadings)
-Positive loadings indicate a variable and a principal component are positively correlated while negative loadings indicate a negative correlation. Large loadings indicate that a variable has a strong effect on that principal component.I need a criterion of what constitutes a “large” loading. Because the sum of the squares of all loadings for an individual principal component must sum to one, we can calculate what the loadings would be if all variables contributed equally to that principal component. Any variable that has a larger loading than this value contributes more than one variable’s worth of information and would be regarded as an important contributor to that principal component.
+
+Positive loadings indicate a variable and a principal component are
+positively correlated while negative loadings indicate a negative
+correlation. Large loadings indicate that a variable has a strong effect
+on that principal component.I need a criterion of what constitutes a
+"large" loading. Because the sum of the squares of all loadings for an
+individual principal component must sum to one, we can calculate what
+the loadings would be if all variables contributed equally to that
+principal component. Any variable that has a larger loading than this
+value contributes more than one variable's worth of information and
+would be regarded as an important contributor to that principal
+component.
 
 ```{r}
 Eigenvectors
@@ -202,25 +248,64 @@ knitr::kable(X, "simple", digits = 3,
 
 ```
 
+To determine which varaibles are important in explaining the loading of
+the principal component, I calculated the cut-off of 0.26. This is the
+loading value if all variables contributed equally. Thus variables with
+loadings greater than this have a disproportionate affect on the
+prinicpal component.
 
+For:
+PC1- age, age^2, Litter size, condition, and condition^2 
+PC2- year, condition, condition^2, and cortisol
+PC3- year, $\delta^{13}$C, and $\delta^{15}$N 
+PC4- $\delta^{13}$C, and $\delta^{15}$N 
 
 # graph the PCA
-```{r}
-autoplot(pca_values, loadings = TRUE, loadings.label = TRUE)
+
+```{r, fig.height=8, fig.width=12, fig.cap="Varaible loadings on the first principal components"}
+autoplot(pca_values, loadings = TRUE, 
+         loadings.label = TRUE,
+         loadings.label.size=4)
 
 ```
 
-So far, I heart this tutorial. So straight forward and helpful. 
+```{r,fig.height=8, fig.width=12, fig.cap="Varaible loadings"}
 
-## Let's explain this graph
-Each line is a vector, which has a magnitude and direction. The size (length) of the arrow denotes the magnitude. Notice the difference between $\delta$ 13C and $\delta$ 15N. Each of these vectors is an *eigenvector*. The default is PCA 1 ~ PCA2, but this can be specified. 
+autoplot(pca_values, loadings = TRUE, 
+         loadings.label = TRUE,
+         loadings.label.size=4,
+         x=2, y=3)
 
-To interpret this: Arrows with similar lengths and directions are more correlated than very different arrows. 
+```
 
-The direction and magnitude also tells you how much that variable *loads* on that axis. Consider Zncubs, which points to the left of the graph. This tells us that decreasing values of PCA 1 equate to larger values of Zncubs. This is also true for PCA 2 because the line is sloped down, but the relationship is less strong. 
+```{r,fig.height=8, fig.width=12, fig.cap="Varaible loadings"}
 
-Because this graph exists in non-dimensional space, the spatial arrangement and clustering of points matters. We can see this if we color the points.
+autoplot(pca_values, loadings = TRUE, 
+         loadings.label = TRUE,
+         loadings.label.size=4,
+         x=3, y=4)
 
+```
+
+## Let's explain these graphs
+
+Each line is a vector, which has a magnitude and direction. The size
+(length) of the arrow denotes the magnitude. Notice the difference
+between $\delta$ 13C and $\delta$ 15N. Each of these vectors is an
+*eigenvector*. The default is PCA 1 \~ PCA2, but this can be specified.
+
+To interpret this: Arrows with similar lengths and directions are more
+correlated than very different arrows.
+
+The direction and magnitude also tells you how much that variable
+*loads* on that axis. Consider Zncubs, which points to the left of the
+graph. This tells us that decreasing values of PCA 1 equate to larger
+values of Zncubs. This is also true for PCA 2 because the line is sloped
+down, but the relationship is less strong.
+
+Because this graph exists in non-dimensional space, the spatial
+arrangement and clustering of points matters. We can see this if we
+color the points.
 
 # Tying the PCA to other analysis
 
@@ -254,7 +339,6 @@ ggplot(data = pca_points, aes(PC3, Zcort))+
 
 
 ```
-
 
 # Creating PCA graphs for publication
 
@@ -319,19 +403,29 @@ pca_load <-
   as.data.frame(cbind(Vnames,pca_values$rotation, row.names = "variable") )
 pca_load$PC1 <- as.numeric(pca_load$PC1)
 pca_load$PC2 <- as.numeric(pca_load$PC2)
+pca_load$PC3 <- as.numeric(pca_load$PC3)
+pca_load$PC4 <- as.numeric(pca_load$PC4)
 
 
 PCA_hull.RC <- pca_points %>%
   group_by(reprocat) %>%
   slice(chull(PC1,PC2))
 
+P <- palette(viridis(9))
+```
 
+
+```{r, include=FALSE}
 ggplot(pca_points, aes(x = PC1, y = PC2)) +
   geom_polygon(data = PCA_hull.RC, aes(fill= reprocat, colour=reprocat),
                alpha=0.3, show.legend = FALSE)+
-  scale_fill_viridis(discrete = TRUE, end = 0.90)+
+  scale_fill_manual(breaks=c("Sfem","Wcubs"),
+                     labels=c("Single females","Females with offspring"),
+                     values = c(P[1],P[7]))+
   geom_point(aes(colour = reprocat), size=3, alpha=0.8)+
-  scale_color_viridis(discrete = TRUE, end = 0.90)+
+  scale_color_manual(breaks=c("Sfem","Wcubs"),
+                     labels=c("Single females","Females with offspring"),
+                     values = c(P[1],P[7]))+
   geom_segment(data = pca_load, 
                aes(x = 0, y = 0, 
                    xend = PC1*5,
@@ -339,7 +433,146 @@ ggplot(pca_points, aes(x = PC1, y = PC2)) +
                arrow = arrow(length = unit(1/2, 'picas')), lwd=1.2) +
   annotate('text', x = (pca_load$PC1*6.3), y = (pca_load$PC2*6.6),
            label = pca_load$Vnames,
-           size = 5) 
+           size = 5)+
+  labs(fill="Reproductive category", color="Reproductive category")
 
 ```
 
+#Graphs for interpretation
+
+## PC1 & PC2
+
+```{r, fig.height=8, fig.width=12, fig.cap="Principal component loadings"}
+
+ggplot(pca_points, aes(x = PC1, y = PC2)) +
+  geom_point(aes(colour = reprocat), size=3, alpha=0.8)+
+  scale_color_manual(breaks=c("Sfem","Wcubs"),
+                     labels=c("Single females","Females with offspring"),
+                     values = c(P[1],P[7]))+
+  geom_segment(data = pca_load, 
+               aes(x = 0, y = 0, 
+                   xend = PC1*5,
+                   yend = PC2*5),
+               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.2) +
+  annotate('text', x = (pca_load$PC1*6.3), y = (pca_load$PC2*6.6),
+           label = pca_load$Vnames,
+           size = 5)+
+  labs(fill="Reproductive category", color="Reproductive category")
+
+```
+
+```{r}
+
+ggplot(Cort.Repro, aes(lnCORT))+
+  geom_histogram(binwidth = 0.5*sd(lnCORT))+
+  geom_vline(xintercept = 1.48)+
+  geom_vline(xintercept = 2.16)
+
+1.48+(3*(0.5*sd(lnCORT)))
+
+
+CC <- rep(0,length.out=270)
+
+for (i in 1:270) {
+  if(lnCORT[i] < 1.49){
+    CC[i]=1
+  }else{
+    if(lnCORT[i] > 2.16){
+      CC[i]=2
+    }
+  }
+}
+
+CC
+lnCORT
+
+Cort.Repro$CatCort <-as.factor(CC)
+pca_points$CatCort <-as.factor(CC)
+
+
+```
+
+```{r, fig.height=8, fig.width=12, fig.cap="Principal component loadings"}
+
+ggplot(pca_points, aes(x = PC1, y = PC2)) +
+  geom_point(aes(colour = reprocat), size=3, alpha=0.8)+
+  scale_color_manual(breaks=c("Sfem","Wcubs"),
+                     labels=c("Single females","Females with offspring"),
+                     values = c(P[1],P[7]))+
+  geom_segment(data = pca_load, 
+               aes(x = 0, y = 0, 
+                   xend = PC1*5,
+                   yend = PC2*5),
+               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.2) +
+  annotate('text', x = (pca_load$PC1*6.3), y = (pca_load$PC2*6.6),
+           label = pca_load$Vnames,
+           size = 5)+
+  labs(fill="Reproductive category", color="Reproductive category")
+
+```
+
+```{r, fig.height=8, fig.width=12, fig.cap="Principal component loadings"}
+
+ggplot(pca_points, aes(x = PC1, y = PC2)) +
+  geom_point(aes(colour = CatCort), size=3, alpha=0.8)+
+  geom_segment(data = pca_load, 
+               aes(x = 0, y = 0, 
+                   xend = PC1*5,
+                   yend = PC2*5),
+               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.2) +
+  annotate('text', x = (pca_load$PC1*6.3), y = (pca_load$PC2*6.6),
+           label = pca_load$Vnames,
+           size = 5)+
+  scale_color_manual(labels=c("Median","Low", "High"),
+                     breaks=c("0","1","2"),
+                     values = c(P[1],P[3],P[8]))+
+   labs(color="Categorical Cortisol")
+
+```
+
+Here we can see that with the first two principal components, we have a distinct grouping between females with and without dependent offspring. Single females are positively associated with PC1, tend to be younger and in poorer condition than females with dependent offspring. The two reproductive categories are not clustered along PC2, which is most strongly associated with year, condition, condition^2, and cortisol. 
+
+## PC2 & PC3
+
+```{r, fig.height=8, fig.width=12, fig.cap="Principal component loadings"}
+
+ggplot(pca_points, aes(x = PC2, y = PC3)) +
+  geom_point(aes(colour = reprocat), size=3, alpha=0.8)+
+  geom_segment(data = pca_load, 
+               aes(x = 0, y = 0, 
+                   xend = PC1*5,
+                   yend = PC2*5),
+               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.2) +
+  annotate('text', x = (pca_load$PC1*6.3), y = (pca_load$PC2*6.6),
+           label = pca_load$Vnames,
+           size = 5)+
+  scale_color_manual(breaks=c("Sfem","Wcubs"),
+                     labels=c("Single females","Females with offspring"),
+                     values = c(P[1],P[7]))+
+  labs(fill="Reproductive category", color="Reproductive category")
+
+  
+```
+
+Again, PC2 was strongly associated with year, condition, condition^2, and cortisol, while PC3 is storngly associated with  year, $\delta^{13}$C, and $\delta^{15}$N. There is no distinct clustering between the reproductive categories along these two components
+
+## PC3 & PC4
+```{r, fig.height=8, fig.width=12, fig.cap="Principal component loadings"}
+
+ggplot(pca_points, aes(x = PC3, y = PC4)) +
+  geom_point(aes(colour = reprocat), size=3, alpha=0.8)+
+  geom_segment(data = pca_load, 
+               aes(x = 0, y = 0, 
+                   xend = PC1*5,
+                   yend = PC2*5),
+               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.2) +
+  annotate('text', x = (pca_load$PC1*6.3), y = (pca_load$PC2*6.6),
+           label = pca_load$Vnames,
+           size = 5)+
+  scale_color_manual(breaks=c("Sfem","Wcubs"),
+                     labels=c("Single females","Females with offspring"),
+                     values = c(P[1],P[7]))+
+  labs(fill="Reproductive category", color="Reproductive category")
+
+  
+```
