@@ -1,11 +1,9 @@
 ---
 title: "Reproduction PCA analysis"
 author: "Ashlee Mikkelsen"
-date: '2022-10-13'
-output: word_document
-editor_options: 
-  markdown: 
-    wrap: 72
+date: "2022-10-13"
+output:
+  word_document
 ---
 
 ```{r setup, include=FALSE}
@@ -445,7 +443,7 @@ ggplot(pca_points, aes(x = PC1, y = PC2)) +
 ```{r, fig.height=8, fig.width=12, fig.cap="Principal component loadings"}
 
 ggplot(pca_points, aes(x = PC1, y = PC2)) +
-  geom_point(aes(colour = reprocat), size=3, alpha=0.8)+
+  geom_point(aes(colour = reprocat), size=4, alpha=0.8)+
   scale_color_manual(breaks=c("Sfem","Wcubs"),
                      labels=c("Single females","Females with offspring"),
                      values = c(P[1],P[7]))+
@@ -457,11 +455,21 @@ ggplot(pca_points, aes(x = PC1, y = PC2)) +
   annotate('text', x = (pca_load$PC1*6.3), y = (pca_load$PC2*6.6),
            label = pca_load$Vnames,
            size = 5)+
-  labs(fill="Reproductive category", color="Reproductive category")
+  labs(fill="Reproductive category", color="Reproductive category")+
+  geom_text(label="Young bears with no offspring in 2nd poorest condition\n with low cort early in the time series",
+            size=5, x=2, y=3.5, color="grey60")+
+  geom_text(label="Young bears with no offspring in poorest condition\n with high cort later in the time series", 
+            size=5, x=2.2, y=-2.8, color="grey60")+
+  geom_text(label="Older bears with offspring in best condition\n with low cort early in the time series", 
+            size=5, x=-4, y=3.5, color="grey60")+
+  geom_text(label="Older bears with offspring in 2nd best condition\n with high cort early in the time series", 
+            size=5, x=-4, y=-2.8, color="grey60")
 
 ```
 
-```{r}
+Here we can see that with the first two principal components, we have a distinct grouping between females with and without dependent offspring. Single females are positively associated with PC1, tend to be younger and in poorer condition than females with dependent offspring. The two reproductive categories are not clustered along PC2, which is most strongly associated with year, condition, condition^2, and cortisol. 
+
+```{r, include=FALSE}
 
 ggplot(Cort.Repro, aes(lnCORT))+
   geom_histogram(binwidth = 0.5*sd(lnCORT))+
@@ -492,13 +500,11 @@ pca_points$CatCort <-as.factor(CC)
 
 ```
 
+
 ```{r, fig.height=8, fig.width=12, fig.cap="Principal component loadings"}
 
 ggplot(pca_points, aes(x = PC1, y = PC2)) +
-  geom_point(aes(colour = reprocat), size=3, alpha=0.8)+
-  scale_color_manual(breaks=c("Sfem","Wcubs"),
-                     labels=c("Single females","Females with offspring"),
-                     values = c(P[1],P[7]))+
+  geom_point(aes(colour = CatCort), size=4, alpha=0.8)+
   geom_segment(data = pca_load, 
                aes(x = 0, y = 0, 
                    xend = PC1*5,
@@ -507,72 +513,109 @@ ggplot(pca_points, aes(x = PC1, y = PC2)) +
   annotate('text', x = (pca_load$PC1*6.3), y = (pca_load$PC2*6.6),
            label = pca_load$Vnames,
            size = 5)+
-  labs(fill="Reproductive category", color="Reproductive category")
-
-```
-
-```{r, fig.height=8, fig.width=12, fig.cap="Principal component loadings"}
-
-ggplot(pca_points, aes(x = PC1, y = PC2)) +
-  geom_point(aes(colour = CatCort), size=3, alpha=0.8)+
-  geom_segment(data = pca_load, 
-               aes(x = 0, y = 0, 
-                   xend = PC1*5,
-                   yend = PC2*5),
-               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.2) +
-  annotate('text', x = (pca_load$PC1*6.3), y = (pca_load$PC2*6.6),
-           label = pca_load$Vnames,
-           size = 5)+
-  scale_color_manual(labels=c("Median","Low", "High"),
-                     breaks=c("0","1","2"),
+  scale_color_manual(labels=c("Low","Median", "High"),
+                     breaks=c("1","0","2"),
                      values = c(P[1],P[3],P[8]))+
-   labs(color="Categorical Cortisol")
+   labs(color="Categorical Cortisol")+
+  geom_text(label="Young bears with no offspring in 2nd poorest condition\n with low cort early in the time series",
+            size=5, x=2, y=3.5, color="grey60")+
+  geom_text(label="Young bears with no offspring in poorest condition\n with high cort later in the time series", 
+            size=5, x=2.2, y=-2.8, color="grey60")+
+  geom_text(label="Older bears with offspring in best condition\n with low cort early in the time series", 
+            size=5, x=-4, y=3.5, color="grey60")+
+  geom_text(label="Older bears with offspring in 2nd best condition\n with high cort early in the time series", 
+            size=5, x=-4, y=-2.8, color="grey60")
 
 ```
 
-Here we can see that with the first two principal components, we have a distinct grouping between females with and without dependent offspring. Single females are positively associated with PC1, tend to be younger and in poorer condition than females with dependent offspring. The two reproductive categories are not clustered along PC2, which is most strongly associated with year, condition, condition^2, and cortisol. 
+However, when I look at cortisol as a categorical variable with values broken into low, median, and high values, we see bands of color form along the second principal component.The categorical cutoff between low, median, and high was determined by using the standard deviation of the log-transformed cortisol data to divide the distribution into thirds. Female with lower cortisol are positively associated with PC2 while females with higher cortisol are negatively associated with  PC2. PC2 is negatively associated with year, condition, condition squared, and cortisol. Not that condition is present in loading both PC1 and PC2 and while it has negative loadings along PC1, it has positive loadings along PC2. Also note that condition is quadratic, which complicates this relationship.
 
 ## PC2 & PC3
+
+```{r, include=FALSE}
+ggplot(data = pca_points, aes(Zcond))+
+  geom_histogram(binwidth = 0.5*sd(Zcond))+
+  geom_vline(xintercept = -0.75)+
+  geom_vline(xintercept = 0.75)
+  
+-0.75+(3*(0.5*sd(Zcond)))
+
+CCd <- rep(1,length.out=270)
+
+for (i in 1:270) {
+  if(Zcond[i] < -0.75){
+    CCd[i]=0
+  }else{
+    if(Zcond[i] > 0.75){
+      CCd[i]=2
+    }
+  }
+}
+
+CCd
+
+
+pca_points$CatCon <-as.factor(CCd)
+
+```
+
 
 ```{r, fig.height=8, fig.width=12, fig.cap="Principal component loadings"}
 
 ggplot(pca_points, aes(x = PC2, y = PC3)) +
-  geom_point(aes(colour = reprocat), size=3, alpha=0.8)+
+  geom_point(size=4, alpha=0.8, aes(color=CatCort))+
   geom_segment(data = pca_load, 
                aes(x = 0, y = 0, 
-                   xend = PC1*5,
-                   yend = PC2*5),
+                   xend = PC2*5,
+                   yend = PC3*5),
                arrow = arrow(length = unit(1/2, 'picas')), lwd=1.2) +
-  annotate('text', x = (pca_load$PC1*6.3), y = (pca_load$PC2*6.6),
+  annotate('text', x = (pca_load$PC2*5.3), y = (pca_load$PC3*5.6),
            label = pca_load$Vnames,
            size = 5)+
-  scale_color_manual(breaks=c("Sfem","Wcubs"),
-                     labels=c("Single females","Females with offspring"),
-                     values = c(P[1],P[7]))+
-  labs(fill="Reproductive category", color="Reproductive category")
+  scale_color_manual(labels=c("Low","Median", "High"),
+                     breaks=c("1","0","2"),
+                     values = c(P[1],P[3],P[8]))+
+   labs(color="Categorical Cortisol")
+
 
   
 ```
 
-Again, PC2 was strongly associated with year, condition, condition^2, and cortisol, while PC3 is storngly associated with  year, $\delta^{13}$C, and $\delta^{15}$N. There is no distinct clustering between the reproductive categories along these two components
-
+Again, PC2 was strongly associated with year, condition, condition^2, and cortisol, while PC3 is strongly associated with  year, $\delta^{13}$C, and $\delta^{15}$N. These two PCs explained a relatively small amount of variation in the data ()
 ## PC3 & PC4
+
+
 ```{r, fig.height=8, fig.width=12, fig.cap="Principal component loadings"}
 
 ggplot(pca_points, aes(x = PC3, y = PC4)) +
-  geom_point(aes(colour = reprocat), size=3, alpha=0.8)+
+  geom_point(aes(colour = Z15N), size=4, alpha=0.8)+
   geom_segment(data = pca_load, 
                aes(x = 0, y = 0, 
-                   xend = PC1*5,
-                   yend = PC2*5),
+                   xend = PC3*5,
+                   yend = PC4*5),
                arrow = arrow(length = unit(1/2, 'picas')), lwd=1.2) +
-  annotate('text', x = (pca_load$PC1*6.3), y = (pca_load$PC2*6.6),
+  annotate('text', x = (pca_load$PC3*5.3), y = (pca_load$PC4*5.6),
            label = pca_load$Vnames,
            size = 5)+
-  scale_color_manual(breaks=c("Sfem","Wcubs"),
-                     labels=c("Single females","Females with offspring"),
-                     values = c(P[1],P[7]))+
-  labs(fill="Reproductive category", color="Reproductive category")
+  scale_color_viridis()
 
   
+```
+
+PC3 and PC4 explain small amounts of variance in the data (~ 14% & 11%), but there is still a visible trend in $\delta^{15}$N along PC3 
+
+```{r, fig.height=8, fig.width=12, fig.cap="Principal component loadings"}
+
+ggplot(pca_points, aes(x = PC3, y = PC4)) +
+  geom_point(aes(colour = Z13C), size=4, alpha=0.8)+
+  geom_segment(data = pca_load, 
+               aes(x = 0, y = 0, 
+                   xend = PC3*5,
+                   yend = PC4*5),
+               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.2) +
+  annotate('text', x = (pca_load$PC3*5.3), y = (pca_load$PC4*5.6),
+           label = pca_load$Vnames,
+           size = 5)+
+  scale_color_viridis(option = "A")
+
 ```
