@@ -502,7 +502,6 @@ pca_points$CatCort <-as.factor(CC)
 
 
 ```{r, fig.height=8, fig.width=12, fig.cap="Principal component loadings"}
-
 ggplot(pca_points, aes(x = PC1, y = PC2)) +
   geom_point(aes(colour = CatCort), size=4, alpha=0.8)+
   geom_segment(data = pca_load, 
@@ -517,14 +516,39 @@ ggplot(pca_points, aes(x = PC1, y = PC2)) +
                      breaks=c("1","0","2"),
                      values = c(P[1],P[3],P[8]))+
    labs(color="Categorical Cortisol")+
-  geom_text(label="Young bears with no offspring in 2nd poorest condition\n with low cort early in the time series",
+  geom_text(label="Samples from young bears with no offspring in 2nd poorest condition\n with low cort early in the time series",
             size=5, x=2, y=3.5, color="grey60")+
-  geom_text(label="Young bears with no offspring in poorest condition\n with high cort later in the time series", 
+  geom_text(label="Samples from young bears with no offspring in poorest condition\n with high cort later in the time series", 
             size=5, x=2.2, y=-2.8, color="grey60")+
-  geom_text(label="Older bears with offspring in best condition\n with low cort early in the time series", 
+  geom_text(label="Samples from older bears with offspring in best condition\n with low cort early in the time series", 
             size=5, x=-4, y=3.5, color="grey60")+
-  geom_text(label="Older bears with offspring in 2nd best condition\n with high cort early in the time series", 
+  geom_text(label="Samples from older bears with offspring in 2nd best condition\n with high cort early in the time series", 
             size=5, x=-4, y=-2.8, color="grey60")
+```
+
+
+```{r, fig.height=8, fig.width=12, fig.cap="Principal component loadings"}
+ggplot(pca_points, aes(x = PC1, y = PC2)) +
+  geom_point(aes(colour = statut), size=4, alpha=0.8)+
+  geom_segment(data = pca_load, 
+               aes(x = 0, y = 0, 
+                   xend = PC1*5,
+                   yend = PC2*5),
+               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.2) +
+  annotate('text', x = (pca_load$PC1*6.3), y = (pca_load$PC2*6.6),
+           label = pca_load$Vnames,
+           size = 5)+
+  geom_text(label="Samples from young bears with no offspring in 2nd poorest condition\n with low cort early in the time series",
+            size=5, x=2, y=3.5, color="grey60")+
+  geom_text(label="Samples from young bears with no offspring in poorest condition\n with high cort later in the time series", 
+            size=5, x=2.2, y=-2.8, color="grey60")+
+  geom_text(label="Samples from older bears with offspring in best condition\n with low cort early in the time series", 
+            size=5, x=-4, y=3.5, color="grey60")+
+  geom_text(label="Samples from older bears with offspring in 2nd best condition\n with high cort early in the time series", 
+            size=5, x=-4, y=-2.8, color="grey60")+
+  scale_color_manual(values = c(P[1],P[5],P[9]),
+                     breaks = c("M","N","P"),
+                     labels=c("Multiparous","NA","Primiparous"))
 
 ```
 
@@ -575,13 +599,47 @@ ggplot(pca_points, aes(x = PC2, y = PC3)) +
   scale_color_manual(labels=c("Low","Median", "High"),
                      breaks=c("1","0","2"),
                      values = c(P[1],P[3],P[8]))+
-   labs(color="Categorical Cortisol")
+   labs(color="Categorical Cortisol")+
+  geom_text(label="Most recent samples from bears in poorer condition\n with high cortisol and high 15N",
+            size=5, x=-2, y=5.5, color="grey60")+
+  geom_text(label="Recent samples from bears in poorer condition\n with high cortisol and low 15N",
+            size=5, x=-2, y=-2.5, color="grey60")+
+  geom_text(label="Early samples from bears in better condition\n with low cortisol and high 15N",
+            size=5, x=3, y=5.5, color="grey60")+
+  geom_text(label="Earliest samples from bears in better condition\n with low cortisol and low 15N",
+            size=5, x=3, y=-2.5, color="grey60")
 
-
-  
 ```
 
-Again, PC2 was strongly associated with year, condition, condition^2, and cortisol, while PC3 is strongly associated with  year, $\delta^{13}$C, and $\delta^{15}$N. These two PCs explained a relatively small amount of variation in the data ()
+Again, PC2 was strongly associated with year, condition, condition^2, and cortisol, while PC3 is strongly associated with  year, $\delta^{13}$C, and $\delta^{15}$N. 
+
+```{r}
+
+ggplot(pca_points, aes(x = PC2, y = PC3)) +
+  geom_point(size=4, alpha=0.8, aes(color=year))+
+  geom_segment(data = pca_load, 
+               aes(x = 0, y = 0, 
+                   xend = PC2*5,
+                   yend = PC3*5),
+               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.2) +
+  annotate('text', x = (pca_load$PC2*5.3), y = (pca_load$PC3*5.6),
+           label = pca_load$Vnames,
+           size = 5)+
+  scale_color_viridis()+
+  geom_text(label="Most recent samples from bears in poorer condition\n with high cortisol, high 15N and low 13C",
+            size=5, x=-2, y=5.5, color="grey60")+
+  geom_text(label="Recent samples from bears in poorer condition\n with high cortisol and low 15N and 13C",
+            size=5, x=-2, y=-2.5, color="grey60")+
+  geom_text(label="Early samples from bears in better condition\n with low cortisol and and 13C, high 15N",
+            size=5, x=3, y=5.5, color="grey60")+
+  geom_text(label="Earliest samples from bears in better condition\n with low cortisol and 15N, high 13C",
+            size=5, x=3, y=-2.5, color="grey60")
+
+
+```
+
+
+
 ## PC3 & PC4
 
 
@@ -597,8 +655,15 @@ ggplot(pca_points, aes(x = PC3, y = PC4)) +
   annotate('text', x = (pca_load$PC3*5.3), y = (pca_load$PC4*5.6),
            label = pca_load$Vnames,
            size = 5)+
-  scale_color_viridis()
-
+  scale_color_viridis()+
+  geom_text(label="Earlier samples from bears with \nsmaller litters, highest 13C, and low 15N",
+            size=5, x=-2.2, y=3, color="grey60")+
+  geom_text(label="Earlier samples from bears with \nlarger litters, high 13C, and lowest 15N",
+            size=5, x=-2.2, y=-2, color="grey60")+
+  geom_text(label="Later samples from bears with \nlarger litters, lowest 13C, and high 15N",
+            size=5, x=4, y=-2, color="grey60")+
+  geom_text(label="Later samples from bears with \nsmaller litters, low 13C, and highest 15N",
+            size=5, x=4.2, y=2.8, color="grey60")
   
 ```
 
@@ -616,6 +681,14 @@ ggplot(pca_points, aes(x = PC3, y = PC4)) +
   annotate('text', x = (pca_load$PC3*5.3), y = (pca_load$PC4*5.6),
            label = pca_load$Vnames,
            size = 5)+
-  scale_color_viridis(option = "A")
+  scale_color_viridis(option = "A")+
+  geom_text(label="Earlier samples from bears with \nsmaller litters, highest 13C, and low 15N",
+            size=5, x=-2.2, y=3, color="grey60")+
+  geom_text(label="Earlier samples from bears with \nlarger litters, high 13C, and lowest 15N",
+            size=5, x=-2.2, y=-2, color="grey60")+
+  geom_text(label="Later samples from bears with \nlarger litters, lowest 13C, and high 15N",
+            size=5, x=4, y=-2, color="grey60")+
+  geom_text(label="Later samples from bears with \nsmaller litters, low 13C, and highest 15N",
+            size=5, x=4.2, y=2.8, color="grey60")
 
 ```
