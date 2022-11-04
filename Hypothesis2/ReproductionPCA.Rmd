@@ -7,7 +7,7 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 ```
 
 # Intro
@@ -57,13 +57,15 @@ library(kableExtra)
 
 ```{r, include=FALSE}
 mytheme <- theme(
-    axis.text = element_text(size = 18,face = "bold"),
-    axis.title = element_text(size = 20, face = "bold"),
+    axis.text = element_text(size = 11,face = "bold"),
+    axis.title = element_text(size = 13, face = "bold"),
     panel.grid.major = element_line(color = "grey92"),
     panel.grid.minor = element_line(color = "grey96"),
     panel.background = element_rect(fill = "white"),
-    axis.line = element_line(colour = "black",size = 1),
+    axis.line = element_line(colour = "black",size = 1.2),
     axis.ticks = element_line(size = 1),
+    legend.text = element_text(size = 10),
+    legend.title = element_text(size = 11, face = "bold")
     )
 theme_set(mytheme)
 ```
@@ -125,7 +127,7 @@ DF.model <- as.data.frame(cbind(Zyr,Zage,Zage.sq,Zncubs,Z13C,
 
 # Do the PCA
 
-```{r}
+```{r, include=FALSE}
 pca_values <- prcomp(DF.model)
 
 summary(pca_values)
@@ -136,6 +138,7 @@ print(VarOfScores)
 scores <- pca_values$x
 
 ```
+
 
 ## Determine how many components to retain
 
@@ -159,10 +162,22 @@ barplot(varPercent, xlab='PC', ylab='Percent Variance',
 abline(h=1/ncol(Cort.Repro)*100, col='red')
 ```
 
-```{r, fig.height=8,fig.width=12}
+```{r, include=FALSE}
 
-varPercent[1:4]
-sum(varPercent[1:4]) 
+varPercent <- round(varPercent[1:4],1)
+sum(varPercent[1:4])
+PCs <- list("PC1","PC2","PC3","PC4")
+S <- rbind(PCs,varPercent)
+
+```
+
+
+```{r}
+
+
+knitr::kable(S, "simple", digits = 3,
+             caption = "Variance explained by first 4 PCs",
+             booktabs=TRUE)
 
 ```
 
@@ -170,20 +185,29 @@ sum(varPercent[1:4])
 
 To calculate the correlation between an original variable and a
 principal component. The correlation between of the original variables
-$X_i$ and principal component $Y_j$ is \$\$
+$X_i$ and principal component $Y_j$ is 
 
-r\_{ij} = \sqrt{a^2_{ij}*var(Y_j)/s_{ii}}
+$$ 
 
-\$\$ where $\alpha_{ij}$ is the *i*th's varaible principal component
+
+r_{ij} = \sqrt{a^2_{ij}*var(Y_j)/s_{ii}}
+$$ 
+
+where $\alpha_{ij}$ is the *i*th's varaible principal component
 weight on principal component *j* and $Y_{j}$ is the *j*th principal
 component score.
 
-$var(Y_j)$ is the variance of the principal.
+$var(Y_j)$ is the variance of the principal component.
 
-or \$\$
+or
 
-r = v\_{ij} \frac{std(Y_j)}{std(X_i)} = v\_{ij}
-\frac{\sqrt{e_j}}{std(X_i)} \$\$ where $v_{ij}$ is an *i*th element of
+$$
+r = v_{ij} \frac{std(Y_j)}{std(X_i)} = v_{ij}
+\frac{\sqrt{e_j}}{std(X_i)} 
+
+$$ 
+
+where $v_{ij}$ is an *i*th element of
 the *j*th unit-length eigenvector of the covariance matrix,
 $e_j=var(Y_j)$ is the corresponding eigenvalue which gives variance of
 this principal component and $std(X_i)$ is the standard deviation of
@@ -235,7 +259,7 @@ value contributes more than one variable's worth of information and
 would be regarded as an important contributor to that principal
 component.
 
-```{r}
+```{r, include=FALSE}
 Eigenvectors
 sqrt(1/ncol(Cort.Repro)) # cutoff for 'important' loadings 
 
@@ -246,16 +270,16 @@ knitr::kable(X, "simple", digits = 3,
 
 ```
 
-To determine which varaibles are important in explaining the loading of
+To determine which variables are important in explaining the loading of
 the principal component, I calculated the cut-off of 0.26. This is the
 loading value if all variables contributed equally. Thus variables with
 loadings greater than this have a disproportionate affect on the
-prinicpal component.
+principal component.
 
 For:
-PC1- age, age^2, Litter size, condition, and condition^2 
-PC2- year, condition, condition^2, and cortisol
-PC3- year, $\delta^{13}$C, and $\delta^{15}$N 
+PC1- $age, age^2, Litter size, condition, condition^2$ 
+PC2- $year, condition, condition^2, cortisol$
+PC3- $year,\delta^{13}C, \delta^{15}N$
 PC4- $\delta^{13}$C, and $\delta^{15}$N 
 
 # graph the PCA
@@ -309,7 +333,7 @@ color the points.
 
 The first step is to combine the PCA values to the rest of the data
 
-```{r}
+```{r, include=FALSE}
 
 pca_points <- 
   # first convert the pca results to a tibble
@@ -340,7 +364,7 @@ ggplot(data = pca_points, aes(PC3, Zcort))+
 
 # Creating PCA graphs for publication
 
-```{r}
+```{r, include=FALSE}
 
 ggplot(pca_points, aes(x = PC1, y = PC2)) +
   geom_point(aes(colour = statut), size=3, alpha=0.8)+
@@ -360,7 +384,7 @@ ggplot(pca_points, aes(x = PC1, y = PC2)) +
 
 ## adding convex hulls
 
-```{r}
+```{r, include=FALSE}
 
 library(dplyr)
 
@@ -393,7 +417,7 @@ ggplot(pca_points, aes(x = PC1, y = PC2)) +
 
 ## Adding eigenvectors back to plot space
 
-```{r}
+```{r, include=FALSE}
 Vnames <- c("Year","Age","Age sq.","NumCubs","d13C","d15N","Condition",
             "Condition sq.", "CORT")
 
@@ -436,34 +460,34 @@ ggplot(pca_points, aes(x = PC1, y = PC2)) +
 
 ```
 
-#Graphs for interpretation
+# Graphs for interpretation
 
 ## PC1 & PC2
 
-```{r, fig.height=8, fig.width=12, fig.cap="Principal component loadings"}
+```{r, fig.height=4.5, fig.width=6.5, fig.cap="Principal component loadings"}
 
 ggplot(pca_points, aes(x = PC1, y = PC2)) +
-  geom_point(aes(colour = reprocat), size=4, alpha=0.8)+
+  geom_point(aes(colour = reprocat), size=2, alpha=0.8)+
   scale_color_manual(breaks=c("Sfem","Wcubs"),
-                     labels=c("Single females","Females with offspring"),
+                     labels=c("Single females","Females with\n offspring"),
                      values = c(P[1],P[7]))+
   geom_segment(data = pca_load, 
                aes(x = 0, y = 0, 
                    xend = PC1*5,
                    yend = PC2*5),
-               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.2) +
+               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.6) +
   annotate('text', x = (pca_load$PC1*6.3), y = (pca_load$PC2*6.6),
            label = pca_load$Vnames,
-           size = 5)+
-  labs(fill="Reproductive category", color="Reproductive category")+
+           size =4 )+
+  labs(fill="Reproductive\n category", color="Reproductive category")+
   geom_text(label="Young bears with no offspring in 2nd poorest condition\n with low cort early in the time series",
-            size=5, x=2, y=3.5, color="grey60")+
+            size=3, x=2, y=3.5, color="grey60")+
   geom_text(label="Young bears with no offspring in poorest condition\n with high cort later in the time series", 
-            size=5, x=2.2, y=-2.8, color="grey60")+
+            size=3, x=2.2, y=-2.8, color="grey60")+
   geom_text(label="Older bears with offspring in best condition\n with low cort early in the time series", 
-            size=5, x=-4, y=3.5, color="grey60")+
+            size=3, x=-4, y=3.5, color="grey60")+
   geom_text(label="Older bears with offspring in 2nd best condition\n with high cort early in the time series", 
-            size=5, x=-4, y=-2.8, color="grey60")
+            size=3, x=-4, y=-2.8, color="grey60")
 
 ```
 
@@ -501,14 +525,14 @@ pca_points$CatCort <-as.factor(CC)
 ```
 
 
-```{r, fig.height=8, fig.width=12, fig.cap="Principal component loadings"}
+```{r, fig.cap="Principal component loadings"}
 ggplot(pca_points, aes(x = PC1, y = PC2)) +
-  geom_point(aes(colour = CatCort), size=4, alpha=0.8)+
+  geom_point(aes(colour = CatCort), size=7, alpha=0.8)+
   geom_segment(data = pca_load, 
                aes(x = 0, y = 0, 
                    xend = PC1*5,
                    yend = PC2*5),
-               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.2) +
+               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.5) +
   annotate('text', x = (pca_load$PC1*6.3), y = (pca_load$PC2*6.6),
            label = pca_load$Vnames,
            size = 5)+
@@ -527,14 +551,14 @@ ggplot(pca_points, aes(x = PC1, y = PC2)) +
 ```
 
 
-```{r, fig.height=8, fig.width=12, fig.cap="Principal component loadings"}
+```{r, fig.height=22, fig.width=30, fig.cap="Principal component loadings"}
 ggplot(pca_points, aes(x = PC1, y = PC2)) +
-  geom_point(aes(colour = statut), size=4, alpha=0.8)+
+  geom_point(aes(colour = statut), size=7, alpha=0.8)+
   geom_segment(data = pca_load, 
                aes(x = 0, y = 0, 
                    xend = PC1*5,
                    yend = PC2*5),
-               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.2) +
+               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.5) +
   annotate('text', x = (pca_load$PC1*6.3), y = (pca_load$PC2*6.6),
            label = pca_load$Vnames,
            size = 5)+
@@ -584,15 +608,15 @@ pca_points$CatCon <-as.factor(CCd)
 ```
 
 
-```{r, fig.height=8, fig.width=12, fig.cap="Principal component loadings"}
+```{r, fig.height=22, fig.width=30, fig.cap="Principal component loadings"}
 
 ggplot(pca_points, aes(x = PC2, y = PC3)) +
-  geom_point(size=4, alpha=0.8, aes(color=CatCort))+
+  geom_point(size=7, alpha=0.8, aes(color=CatCort))+
   geom_segment(data = pca_load, 
                aes(x = 0, y = 0, 
                    xend = PC2*5,
                    yend = PC3*5),
-               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.2) +
+               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.5) +
   annotate('text', x = (pca_load$PC2*5.3), y = (pca_load$PC3*5.6),
            label = pca_load$Vnames,
            size = 5)+
@@ -613,15 +637,15 @@ ggplot(pca_points, aes(x = PC2, y = PC3)) +
 
 Again, PC2 was strongly associated with year, condition, condition^2, and cortisol, while PC3 is strongly associated with  year, $\delta^{13}$C, and $\delta^{15}$N. 
 
-```{r}
+```{r,fig.height=22, fig.width=30, fig.cap="Principal component loadings"}
 
 ggplot(pca_points, aes(x = PC2, y = PC3)) +
-  geom_point(size=4, alpha=0.8, aes(color=year))+
+  geom_point(size=7, alpha=0.8, aes(color=year))+
   geom_segment(data = pca_load, 
                aes(x = 0, y = 0, 
                    xend = PC2*5,
                    yend = PC3*5),
-               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.2) +
+               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.5) +
   annotate('text', x = (pca_load$PC2*5.3), y = (pca_load$PC3*5.6),
            label = pca_load$Vnames,
            size = 5)+
@@ -643,15 +667,15 @@ ggplot(pca_points, aes(x = PC2, y = PC3)) +
 ## PC3 & PC4
 
 
-```{r, fig.height=8, fig.width=12, fig.cap="Principal component loadings"}
+```{r, fig.height=22, fig.width=30, fig.cap="Principal component loadings"}
 
 ggplot(pca_points, aes(x = PC3, y = PC4)) +
-  geom_point(aes(colour = Z15N), size=4, alpha=0.8)+
+  geom_point(aes(colour = Z15N), size=7, alpha=0.8)+
   geom_segment(data = pca_load, 
                aes(x = 0, y = 0, 
                    xend = PC3*5,
                    yend = PC4*5),
-               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.2) +
+               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.5) +
   annotate('text', x = (pca_load$PC3*5.3), y = (pca_load$PC4*5.6),
            label = pca_load$Vnames,
            size = 5)+
@@ -669,15 +693,15 @@ ggplot(pca_points, aes(x = PC3, y = PC4)) +
 
 PC3 and PC4 explain small amounts of variance in the data (~ 14% & 11%), but there is still a visible trend in $\delta^{15}$N along PC3 
 
-```{r, fig.height=8, fig.width=12, fig.cap="Principal component loadings"}
+```{r, fig.height=22, fig.width=30, fig.cap="Principal component loadings"}
 
 ggplot(pca_points, aes(x = PC3, y = PC4)) +
-  geom_point(aes(colour = Z13C), size=4, alpha=0.8)+
+  geom_point(aes(colour = Z13C), size=7, alpha=0.8)+
   geom_segment(data = pca_load, 
                aes(x = 0, y = 0, 
                    xend = PC3*5,
                    yend = PC4*5),
-               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.2) +
+               arrow = arrow(length = unit(1/2, 'picas')), lwd=1.5) +
   annotate('text', x = (pca_load$PC3*5.3), y = (pca_load$PC4*5.6),
            label = pca_load$Vnames,
            size = 5)+
