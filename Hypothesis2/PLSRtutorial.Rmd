@@ -14,10 +14,12 @@ In this file I follow a PLSR tutorial by Bertrand *et al*., 2020
 
 https://fbertran.github.io/plsRglm/
 
+and perform a partial least squares regression on the brown bear cortisol data using several correlated explanetary variables
+
 
 # Setup
 
-```{r}
+```{r, include=FALSE}
 rm(list=ls())
 
 setwd("~/Rprojects/Diet-and-reproduction-in-rown-bears/Hypothesis2")
@@ -25,7 +27,7 @@ setwd("~/Rprojects/Diet-and-reproduction-in-rown-bears/Hypothesis2")
 
 
 ##load libraries
-```{r}
+```{r, include=FALSE}
 library(plsRglm)
 library(ggplot2)
 library(wiqid)
@@ -34,7 +36,7 @@ library(plsdof)
 ```
 
 ## set graph theme
-```{r}
+```{r, include=FALSE}
 mytheme <- theme(
     axis.text = element_text(size = 18,face = "bold"),
     axis.title = element_text(size = 20, face = "bold"),
@@ -48,7 +50,7 @@ theme_set(mytheme)
 ```
 
 ### create data table
-```{r}
+```{r, include=FALSE}
 HP2.dat <- read.csv("BearReproData_H2Analysis.csv")
 
 Cort.Repro <- HP2.dat[,c(13,3,6,10,11,12,14,15,16,22,23,26,28)]
@@ -58,15 +60,24 @@ Cort.Repro$age2<-Cort.Repro$age^2
 
 colSums(is.na(Cort.Repro))
 
+Cort.Repro$lnCORT <- log(Cort.Repro$cort)
+```
+
+
+
+```{r, fig.height=8, fig.width=12}
+
 ggplot(data = Cort.Repro, aes(cort))+
   geom_histogram(binwidth = sd(Cort.Repro$cort)*0.5)
 
 ```
 
+As we have seen before, the distribution of the cortisol data is quite skewed. While normality is not an explicit assumption of PLS as it is in OLS and ML, there is some evidence that PLS is sentisitve to very skewed data (Goodhue et al., 2012). Therefore I will weight the original data and resulting relationships agianst one another.
 
 ### standardize cont. vars
 ```{r}
 Zcort <- standardize(Cort.Repro$cort)
+ZlnCORT <- standardize(Cort.Repro$lnCORT)
 Zyr <- standardize(Cort.Repro$year)
 Zage <- standardize(Cort.Repro$age)
 Zage.sq <- standardize(Cort.Repro$age2)
@@ -81,11 +92,11 @@ Zcond.sq <- standardize(Cort.Repro$conditionsq)
 ### Creat model DF
 ```{r}
 DF.model <- as.data.frame(cbind(Zyr,Zage,Zage.sq,Zncubs,Z13C,
-                                Z15N,Zcond,Zcond.sq,Zcort))
+                                Z15N,Zcond,Zcond.sq,Zcort,ZlnCORT))
 
 ```
 
-# Run Models
+# Run Normal Models
 
 ## first model
 
@@ -121,7 +132,7 @@ plot(res.cv.modpls)
 ```
 
 
-# Fot the model with 1 component to obtain regression coefficients
+# Fit the model with 1 component to obtain regression coefficients
 
 ```{r}
 
@@ -171,6 +182,8 @@ boxplots.bootpls(MvarRepro.bootYT1,indices=2:9)
 temp.ci=confints.bootpls(MvarRepro.bootYT1,indices=2:9)
 plots.confints.bootpls(temp.ci,typeIC="BCa",colIC=c("blue","blue","blue","blue"), legendpos ="topright")
 
+
+
 ```
 
 
@@ -190,8 +203,11 @@ ind.BCa.MvarReproYT2 <- (temp.ci2[,7]<0&temp.ci2[,8]<0)|(temp.ci2[,7]>0&temp.ci2
 
 res2
 
-C <- res2$Coeffs
-C
+Cnorm <- res2$Coeffs
+Cnorm
+
+Cdiff <- Cnorm-C
+#There is no difference in the regression coefficients between the normal and log data
 
 ```
 
@@ -234,6 +250,433 @@ New.cond.sq <- New.cond^2
 The regression model is:
 
 Zcort~b0+b1xZyr+b2xZage+b3xZage.sq+b4xZncubs+b5xZ13C+b6xZ15N+b7xZcond+b8xZcond.sq
+
+To look at the relationship between CORT and any given factor, I need to hold all others at their means
+
+## Specific covariate outputs
+
+### year
+```{r}
+Cort.Yr <- function(x){
+  Cnorm[1]+Cnorm[2]*x+Cnorm[3]*mZage+Cnorm[4]*mZage.sq+
+    Cnorm[5]*mZncubs+Cnorm[6]*mZ13C+Cnorm[7]*mZ15N+
+    Cnorm[8]*mZcond+Cnorm[9]*mZcond.sq
+}
+Y <- Cort.Yr(New.yr)
+plot(New.yr,Y)
+
+UnZcort.Y <- (Y*sd(Cort.Repro$cort))+mean(Cort.Repro$cort)
+print(UnZcort.Y)
+
+UnZyr<- (New.yr*sd(Cort.Repro$year))+mean(Cort.Repro$year)
+print(UnZyr)
+
+Year.DF <- as.data.frame(cbind(Y, New.yr,UnZcort.Y,UnZyr,
+                               Cort.Repro$cort, Cort.Repro$year))
+
+ggplot(data = Year.DF, aes(UnZyr,UnZcort.Y))+
+  geom_line(lwd=1.2)+
+  geom_jitter(aes(V6,V5), size=2, alpha=0.3, width = 0.15)+
+  ylab("Hair cortisol")+
+  xlab("Year")+
+  scale_y_continuous(limits = c(0,35))
+
+ggplot(data = Year.DF, aes(UnZyr,UnZcort.Y))+
+  geom_line(lwd=1.2)+
+  geom_jitter(aes(V6,V5), size=2, alpha=0.3, width = 0.15)+
+  ylab("Hair cortisol")+
+  xlab("Year")+
+  scale_y_continuous(limits = c(0,15))
+
+```
+
+### Age
+```{r}
+Cort.age <-  function(x){
+  Cnorm[1]+
+    Cnorm[2]*mZyr+
+    (Cnorm[3]*New.age)+(Cnorm[4]*(New.age^2))+
+    Cnorm[5]*mZncubs+
+    Cnorm[6]*mZ13C+
+    Cnorm[7]*mZ15N+
+    (Cnorm[8]*mZcond)+(Cnorm[9]*mZcond.sq)
+}
+
+A<-Cort.age(New.age)
+
+plot(New.age,A)
+
+UnZcort.A <- (A*sd(Cort.Repro$cort))+mean(Cort.Repro$cort)
+print(UnZcort.A)
+
+UnZage<- (New.age*sd(Cort.Repro$age))+mean(Cort.Repro$age)
+print(UnZage)
+
+UnZage.sq <- UnZage^2
+
+Age.DF <- as.data.frame(cbind(A, New.age,
+                              UnZcort.A,UnZage,
+                              Cort.Repro$cort, Cort.Repro$age))
+
+ggplot(data = Age.DF, aes(New.age,A))+
+  geom_line(lwd=1.2)
+
+ggplot(data = Age.DF, aes(UnZage,UnZcort.A))+
+  geom_line()
+
+ggplot(data = Age.DF, aes(UnZage,UnZcort.A))+
+  geom_line(lwd=1.2)+
+  geom_jitter(aes(V6,V5), size=2, alpha=0.3, width = 0.15)+
+  ylab("Hair cortisol")+
+  xlab("Bear Age")+
+  scale_y_continuous(limits = c(0,35))
+
+ggplot(data = Age.DF, aes(UnZage,UnZcort.A))+
+  geom_line(lwd=1.2)+
+  geom_jitter(aes(V6,V5), size=2, alpha=0.3, width = 0.15)+
+  ylab("Hair cortisol")+
+  xlab("Bear Age")+
+  scale_y_continuous(limits = c(0,15))
+
+
+```
+
+
+### Condition
+
+```{r}
+
+Cort.cond <-function(x){
+  Cnorm[1]+
+    Cnorm[2]*mZyr+
+    (Cnorm[3]*mZage)+(C[4]*mZage^2)+
+    Cnorm[5]*mZncubs+
+    Cnorm[6]*mZ13C+
+    Cnorm[7]*mZ15N+
+    Cnorm[8]*New.cond+Cnorm[9]*(New.cond^2)
+}
+CC <- Cort.cond(New.cond)
+print(CC)
+UnZcort.C <- (CC*sd(Cort.Repro$cort))+mean(Cort.Repro$cort)
+print(UnZcort.C)
+
+UnZcond<- (New.cond*sd(Cort.Repro$condition))+mean(Cort.Repro$condition)
+print(UnZcond)
+
+Cond.DF <- as.data.frame(cbind(CC, New.cond,
+                              UnZcort.C,UnZcond,
+                              Cort.Repro$cort, Cort.Repro$condition))
+
+ggplot(data = Cond.DF, aes(New.cond,CC))+
+  geom_line(lwd=1.2)
+
+ggplot(data = Cond.DF, aes(UnZcond,UnZcort.C))+
+  geom_line(lwd=1.2)+
+  geom_point(aes(V6,V5), size=2, alpha=0.3)+
+  ylab("Hair cortisol")+
+  xlab("Bear Body Condition")+
+  scale_y_continuous(limits = c(0,35))
+
+ggplot(data = Cond.DF, aes(UnZcond,UnZcort.C))+
+  geom_line(lwd=1.2)+
+  geom_point(aes(V6,V5), size=2, alpha=0.3)+
+  ylab("Hair cortisol")+
+  xlab("Bear Body Condition")+
+  scale_y_continuous(limits = c(0,15))
+
+```
+
+
+### Litter Size
+
+```{r}
+
+Cort.Ncubs <-function(x){
+  Cnorm[1]+
+    Cnorm[2]*mZyr+
+    (Cnorm[3]*mZage)+(C[4]*mZage^2)+
+    Cnorm[5]*New.ncubs+
+    Cnorm[6]*mZ13C+
+    Cnorm[7]*mZ15N+
+    Cnorm[8]*mZcond+Cnorm[9]*(mZcond^2)
+}
+LS <- Cort.Ncubs(New.ncubs)
+print(LS)
+UnZcort.LS <- (LS*sd(Cort.Repro$cort))+mean(Cort.Repro$cort)
+print(UnZcort.LS)
+
+UnZncubs<- (New.ncubs*sd(Cort.Repro$cubsfirstcount))+
+  mean(Cort.Repro$cubsfirstcount)
+print(UnZncubs)
+
+Litter.DF <- as.data.frame(cbind(LS, New.ncubs,
+                              UnZcort.LS,UnZncubs,
+                              Cort.Repro$cort, Cort.Repro$cubsfirstcount))
+
+ggplot(data = Litter.DF, aes(New.ncubs,LS))+
+  geom_line(lwd=1.2)
+
+ggplot(data = Litter.DF, aes(UnZncubs,UnZcort.LS))+
+  geom_line(lwd=1.2)+
+  geom_jitter(aes(V6,V5), size=2, alpha=0.3,width = 0.15)+
+  ylab("Hair cortisol")+
+  xlab("Litter Size")+
+  scale_y_continuous(limits = c(0,35))
+
+```
+
+
+
+### Carbon
+
+```{r}
+
+Cort.d13C <-function(x){
+  Cnorm[1]+
+    Cnorm[2]*mZyr+
+    (Cnorm[3]*mZage)+(Cnorm[4]*mZage^2)+
+    Cnorm[5]*mZncubs+
+    Cnorm[6]*New.13C+
+    Cnorm[7]*mZ15N+
+    Cnorm[8]*mZcond+C[9]*(mZcond^2)
+}
+dC <- Cort.d13C(New.13C)
+print(dC)
+UnZcort.dC <- (dC*sd(Cort.Repro$cort))+mean(Cort.Repro$cort)
+print(UnZcort.dC)
+
+UnZd13C<- (New.13C*sd(Cort.Repro$C13.suess))+
+  mean(Cort.Repro$C13.suess)
+print(UnZd13C)
+
+d13C.DF <- as.data.frame(cbind(dC, New.13C,
+                              UnZcort.dC,UnZd13C,
+                              Cort.Repro$cort,Cort.Repro$C13.suess))
+
+ggplot(data = Litter.DF, aes(New.13C,dC))+
+  geom_line(lwd=1.2)
+
+ggplot(data = d13C.DF, aes(UnZd13C,UnZcort.dC))+
+  geom_line(lwd=1.2)+
+  geom_point(aes(V6,V5), size=2, alpha=0.3)+
+  ylab("Hair cortisol")+
+  xlab(expression(paste(delta^13, "C (\u2030)", sep = "")))+
+  scale_y_continuous(limits = c(0,35))
+
+ggplot(data = d13C.DF, aes(UnZd13C,UnZcort.dC))+
+  geom_line(lwd=1.2)+
+  geom_point(aes(V6,V5), size=2, alpha=0.3)+
+  ylab("Hair cortisol")+
+  xlab(expression(paste(delta^13, "C (\u2030)", sep = "")))+
+  scale_y_continuous(limits = c(0,17))
+
+```
+
+
+### Nitrogen
+
+```{r}
+
+Cort.d15N <-function(x){
+  Cnorm[1]+
+    Cnorm[2]*mZyr+
+    (Cnorm[3]*mZage)+(Cnorm[4]*mZage^2)+
+    Cnorm[5]*mZncubs+
+    Cnorm[6]*mZ13C+
+    Cnorm[7]*New.15N+
+    Cnorm[8]*mZcond+Cnorm[9]*(mZcond^2)
+}
+dN <- Cort.d15N(New.15N)
+print(dN)
+UnZcort.dN <- (dN*sd(Cort.Repro$cort))+mean(Cort.Repro$cort)
+print(UnZcort.dN)
+
+UnZd15N<- (New.15N*sd(Cort.Repro$N15))+
+  mean(Cort.Repro$N15)
+print(UnZd15N)
+
+d15N.DF <- as.data.frame(cbind(dN, New.15N,
+                              UnZcort.dN,UnZd15N,
+                              Cort.Repro$cort,Cort.Repro$N15))
+
+ggplot(data = d15N.DF, aes(New.15N,dN))+
+  geom_line(lwd=1.2)
+
+ggplot(data = d15N.DF, aes(UnZd15N,UnZcort.dN))+
+  geom_line(lwd=1.2)+
+  geom_point(aes(UnZd15N,V5), size=2, alpha=0.3)+
+  ylab("Hair cortisol")+
+  xlab(expression(paste(delta^15, "N (\u2030)", sep = "")))+
+  scale_y_continuous(limits = c(0,35))
+
+ggplot(data = d15N.DF, aes(UnZd15N,UnZcort.dN))+
+  geom_line(lwd=1.2)+
+  geom_point(aes(V6,V5), size=2, alpha=0.3)+
+  ylab("Hair cortisol")+
+  xlab(expression(paste(delta^15, "N (\u2030)", sep = "")))+
+  scale_y_continuous(limits = c(0,17))
+
+```
+
+
+
+
+# Run log-transformed Models
+There is an underlying assumption of normality to these models and my cortisol data is skewed, so I log transformed it to meet these assumptions.
+
+## first model
+
+```{r}
+log.cv.modpls<-cv.plsR(ZlnCORT~.,
+                   data=DF.model,
+                   nt=10,K=6)
+
+log.res.cv.modpls<-cvtable(summary(cv.modpls))
+
+```
+
+## second model
+
+```{r}
+log.res6<-plsR(ZlnCORT~.,
+           data=DF.model,
+           nt=6, typeVC="standard", pvals.expli=TRUE)
+
+colSums(log.res6$pvalstep)
+
+log.res6$InfCrit
+
+log.cv.modpls<-cv.plsR(Zcort~.,
+                   data=DF.model
+                   ,nt=10,K=6,NK=200,
+                   random=TRUE,verbose = FALSE)
+
+log.res.cv.modpls=cvtable(summary(cv.modpls))
+
+plot(log.res.cv.modpls)
+
+```
+
+
+# Fit the model with 1 component to obtain regression coefficients
+
+```{r}
+
+logres<-plsR(ZlnCORT~.,
+          data= DF.model,nt=1,
+          pvals.expli=TRUE)
+logres
+
+logres$wwetoile
+
+biplot(log.res6$tt,log.res6$pp)
+
+modpls2 <- plsR(ZlnCORT~.,
+                data= DF.model,
+                6,sparse=TRUE)
+
+modpls3 <- plsR(ZlnCORT ~.,
+                data=DF.model,6,
+                sparse=TRUE,sparseStop=FALSE)
+
+```
+
+# Bootstrapping
+
+```{r}
+
+log.MvarRepro.bootYX1=bootpls(logres,R=5000,verbose=FALSE)
+
+boxplots.bootpls(log.MvarRepro.bootYX1,indice=2:9)
+
+log.temp.ci=confints.bootpls(MvarRepro.bootYX1,indice=2:9)
+plots.confints.bootpls(temp.ci,typeIC="BCa",colIC=c("blue","blue","blue","blue"), legendpos ="topright")
+
+plot(log.MvarRepro.bootYX1,index=2,jack=TRUE)
+
+car::dataEllipse(log.MvarRepro.bootYX1$t[,2], log.MvarRepro.bootYX1$t[,3], cex=.3, levels=c(.5, .95, .99), robust=T, xlab="X2", ylab="X3")
+
+```
+
+Using another method of bootstrapping to compare
+
+```{r}
+log.MvarRepro.bootYT1=bootpls(res,typeboot="fmodel_np",R=1000)
+
+log.boxplots.bootpls(MvarRepro.bootYT1,indices=2:9)
+
+log.temp.ci=confints.bootpls(log.MvarRepro.bootYT1,indices=2:9)
+plots.confints.bootpls(log.temp.ci,typeIC="BCa",colIC=c("blue","blue","blue","blue"), legendpos ="topright")
+
+
+
+```
+
+
+```{r}
+
+log.res2<-plsR(ZlnCORT~.,
+           data= DF.model,nt=2)
+
+log.MvarRepro.bootYT2=bootpls(log.res2,typeboot="fmodel_np",R=1000)
+log.temp.ci2<-confints.bootpls(log.MvarRepro.bootYT2,indices=2:9)
+
+log.ind.BCa.MvarReproYT1 <- (log.temp.ci[,7]<0&log.temp.ci[,8]<0)|(log.temp.ci[,7]>0&log.temp.ci[,8]>0)
+
+log.ind.BCa.MvarReproYT2 <- (log.temp.ci2[,7]<0&log.temp.ci2[,8]<0)|(log.temp.ci2[,7]>0&log.temp.ci2[,8]>0)
+
+(matind=(rbind(YT1=log.ind.BCa.MvarReproYT1,YT2=log.ind.BCa.MvarReproYT2)))
+
+log.res2
+
+C <- log.res2$Coeffs
+C
+
+Cdiff <- Cnorm-C
+
+print(Cdiff)
+
+```
+
+
+# Interrpreting output
+Does it make biological sense
+
+## Find means for each covariate
+They should be zero, but...
+```{r}
+mZyr <- mean(Zyr)
+mZage <- mean(Zage)
+mZage.sq <- mean(Zage.sq)
+mZncubs <- mean(Zncubs)
+mZ13C <- mean(Z13C)
+mZ15N <- mean(Z15N)
+mZcond <-mean(Zcond)
+mZcond.sq <- mean(Zcond.sq)
+
+```
+
+
+## Create new data
+```{r}
+
+New.cort <- seq(min(ZlnCORT),max(ZlnCORT), length.out=nrow(Cort.Repro))
+New.yr <- seq(min(Zyr),max(Zyr), length.out=nrow(Cort.Repro))
+New.age <- seq(min(Zage),max(Zage), length.out=nrow(Cort.Repro))
+New.age.sq <-New.age^2
+New.ncubs <- seq(min(Zncubs),max(Zncubs), length.out=nrow(Cort.Repro))
+New.13C <- seq(min(Z13C),max(Z13C), length.out=nrow(Cort.Repro))
+New.15N <- seq(min(Z15N),max(Z15N), length.out=nrow(Cort.Repro))
+New.cond <- seq(min(Zcond),max(Zcond), length.out=nrow(Cort.Repro))
+New.cond.sq <- New.cond^2
+
+```
+
+
+
+The regression model is:
+
+Zln(cort)~b0+b1xZyr+b2xZage+b3xZage.sq+b4xZncubs+b5xZ13C+b6xZ15N+b7xZcond+b8xZcond.sq
 
 To look at the relationship between CORT and any given factor, I need to hold all others at their means
 
@@ -304,7 +747,7 @@ Age.DF <- as.data.frame(cbind(A, New.age,
 ggplot(data = Age.DF, aes(New.age,A))+
   geom_line(lwd=1.2)
 
-ggplot(data = Age.DF, aes(UnZage,UnZcort))+
+ggplot(data = Age.DF, aes(UnZage,UnZcort.A))+
   geom_line()
 
 ggplot(data = Age.DF, aes(UnZage,UnZcort.A))+
@@ -443,15 +886,15 @@ ggplot(data = d13C.DF, aes(UnZd13C,UnZcort.dC))+
   geom_line(lwd=1.2)+
   geom_point(aes(V6,V5), size=2, alpha=0.3)+
   ylab("Hair cortisol")+
-  xlab("d13C")+
+  xlab(expression(paste(delta^13, "C (\u2030)", sep = "")))+
   scale_y_continuous(limits = c(0,35))
 
 ggplot(data = d13C.DF, aes(UnZd13C,UnZcort.dC))+
   geom_line(lwd=1.2)+
   geom_point(aes(V6,V5), size=2, alpha=0.3)+
   ylab("Hair cortisol")+
-  xlab("d13C")+
-  scale_y_continuous(limits = c(0,15))
+  xlab(expression(paste(delta^13, "C (\u2030)", sep = "")))+
+  scale_y_continuous(limits = c(0,17))
 
 ```
 
@@ -489,14 +932,14 @@ ggplot(data = d15N.DF, aes(UnZd15N,UnZcort.dN))+
   geom_line(lwd=1.2)+
   geom_point(aes(UnZd15N,V5), size=2, alpha=0.3)+
   ylab("Hair cortisol")+
-  xlab("d15N")+
+  xlab(expression(paste(delta^15, "N (\u2030)", sep = "")))+
   scale_y_continuous(limits = c(0,35))
 
 ggplot(data = d15N.DF, aes(UnZd15N,UnZcort.dN))+
   geom_line(lwd=1.2)+
   geom_point(aes(V6,V5), size=2, alpha=0.3)+
   ylab("Hair cortisol")+
-  xlab("d15N")+
+  xlab(expression(paste(delta^15, "N (\u2030)", sep = "")))+
   scale_y_continuous(limits = c(0,17))
 
 ```
