@@ -537,7 +537,35 @@ ggplot(data = df.d15Nln, aes(UnZUnln15N, pred.cort.lnd15N))+
   
 ```
 
+So, bears with higher $\delta^{15}N$ signatures tend to also have lower cortisol, and the relationship is steeper with lower $\delta^{15}N$ signatures than higher signatures. Bears with higher $\delta^{15}N$ signatures tend to be older, larger, males who (supposedly) have higher metabolic demands. So I can interpret this relationship 2 ways:
 
+1: eating more meat or protein rich foods is a better diet for bears and bears who eat these foods are in better condition and have fewer metabolic demands than other bears.
+
+2: Bears with lower metabolic demands or that are in better condition can afford to seek out and consume a diet with more protein-rich foods.
+
+I will need to see how this relationship shakes out in the PCA and PLSR.
+
+
+```{r, include=FALSE}
+INT.d15N <- RC.d15N <- glmer(N15 ~1+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+INT.d15N.aicc <- AICc(INT.d15N)
+
+RC.d15N <- glmer(N15 ~reprocat+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+RC.d15N.aicc <- AICc(RC.d15N)
+
+print(INT.d15N.aicc)
+print(RC.d15N.aicc)
+
+summary(RC.d15N)
+
+```
+
+
+**NOTE**: There are no males in this analysis. But based on a GLMM, females with dependent offspring had lower $\delta^{15}N$ values than solitary females 
 
 ### Condition
 
@@ -593,7 +621,8 @@ plot(NonLinear.Cond,pred.cort.QuadCond)
 
 
 ```{r, include=FALSE}
-UnZCond <- (NonLinear.Cond*sd(Cort.Repro$Zcond))+mean(Cort.Repro$Zcond)
+UnZCond <- (NonLinear.Cond*sd(Cort.Repro$condition))+
+  mean(Cort.Repro$condition)
 UnZCond
 
 df.CondQuad <- as.data.frame(cbind(pred.cort.QuadCond,UnZCond))
@@ -608,12 +637,71 @@ ggplot(data = df.CondQuad, aes(UnZCond,pred.cort.QuadCond))+
   ylab("Predicted bear hair cortisol concentrations")+
   xlab("Bear body condition (spring mass / head circumference)")+
   scale_y_continuous(expand=c(0,0))+
-  scale_x_continuous(expand = c(0,0))
+  scale_x_continuous(expand = c(0,0))+
+  geom_vline(xintercept = 1.485, lwd=1,
+             color="grey77", lty="dashed")+
+  geom_text(label="1.485", y=0.04, x=1.52, size=5, color="grey57")
 
 ```
 
-While there is good support for a quadratic relationship between body condition and cortisol, ($\Delta AIC_c$)= 10.8 and 95% CIs for both terms in the model do not overlap 0), body condition actually explains vary little variation in CORT, or, that is to say, has ver little power to accurately predict CORT, as we can see from the very small y-scale
+While there is good support for a quadratic relationship between body condition and cortisol, ($\Delta AIC_c$)= 10.8 and 95% CIs for both terms in the model do not overlap 0), body condition actually explains vary little variation in CORT, or, that is to say, has ver little power to accurately predict CORT, as we can see from the very small y-scale.
 
+We see that the regression predicts that cortisol is greatest in bears of median body condition, and as body condition increases, cortisol decreases. This is likely due to these bears having fewer metabolic demands or greater resources to meet metabolic demands. Bears below the median body condition also have lower cortisol concentrations. This is likely driven by a down-regulation of cortisol, whether it's reduced APH reactivity or binding molecules. This could be a result of the poor body condition decreasing activity, or may indicate bear with the greatest metabolic demands (likely lactating females) down regulating cortisol, perhaps related to reproduction.
+
+```{r}
+INT.BC <- glmer(condition ~1+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+INT.BC.aicc <- AICc(INT.BC)
+
+RC.BC <- glmer(condition ~reprocat+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+
+RC.BC.aicc <- AICc(RC.BC)
+
+print(INT.BC.aicc)
+print(RC.BC.aicc)
+
+summary(RC.BC)
+
+P <- palette(viridis(5))
+
+Cort.Repro$fAGE <- as.factor(Cort.Repro$age)
+
+```
+
+According to the GLMM body condition ~ reproductive category, females with dependent offspring have higher body condition than solitary females
+
+```{r,fig.height=6, fig.width=7}
+
+ggplot(data = Cort.Repro, aes(condition))+
+  geom_histogram(aes(fill=reprocat), 
+                 binwidth = 0.5*sd(Cort.Repro$condition))+
+  scale_fill_manual(values =c(P[1],P[4]),
+                    breaks = c("Sfem", "Wcubs"),
+                    labels=c("Independent Females", 
+                             "Females with offspring"))+
+  labs(fill="Reproductive Category")+
+  scale_y_continuous(expand = c(0,0))+
+  scale_x_continuous(expand=c(0,0))
+
+```
+
+When we look at the distribution of body condition in the two different reproductive categories, females with offspring tend to be at the higher end of the body condition distribution, which makes some sense, because bears need to meet a threshold of ~20% fat in order to reproduce, so only females in generally "good" condition will reproduce. However, this applies to the fall body condition, and we measure bears in the spring after den emergence. Therefore, I expected females with dependent offspring to be in worse body condition after giving birth and lactating (if she is with cubs of the year) or trading off safety for foraging to avoid males and protect cubs (if cub age is beyond cubs of the year).
+
+
+```{r,fig.height=6, fig.width=7}
+
+ggplot(data = Cort.Repro, aes(condition))+
+  geom_histogram(aes(fill=fAGE), 
+                 binwidth = 0.5*sd(Cort.Repro$condition))+
+  labs(fill="Age")+
+  scale_y_continuous(expand = c(0,0))+
+  scale_x_continuous(expand=c(0,0))+
+  scale_fill_viridis(discrete = TRUE)
+
+```
 
 # Testing correlated covariates
 Above I determined that age was highly correlated with litter size and also with body condition. Like my methods above, I am going to model each of these and compare their power to explain deviance in the cortisol data. If there is no or weak support in the data for an effect (CIs that largely overlap zero and AICc values greater than intercept only model), I will exclude them from further modelling. If there is strong support for an effect in the data, I will retain them and build separate models to accommodate their colinearity and use the results of both models to draw inference.
@@ -638,7 +726,7 @@ Linagelm<- glmer(cort ~Zage+(1|fYR),
 Linageaic<-AICc(Linagelm)
 
 
-Quadagelm<- glmer(cort ~Zage+Zagesq+(1|fYR),
+Quadagelm<- glmer(cort ~Zage+Zage^2+(1|fYR),
                data = Cort.Repro,
                family = gaussian(link = "log"),
                glmerControl(optimizer ='optimx',
@@ -651,6 +739,13 @@ lnagelm<- glmer(cort ~Zageln+(1|fYR),
                data = Cort.Repro,
                family = gaussian(link = "log"))
 lnageaic<-AICc(lnagelm)
+
+SB <-glmer(cort ~reprocat+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+SBaic <- AICc(SB)
+
+
 ```
 
 Below are the AICc scores for the three competing age models: linear, quadratic, and log-linear.
@@ -661,10 +756,17 @@ print(Linageaic)
 print(Quadageaic)
 print(lnageaic)
 ```
-and log linear is the best-supported relationship.
+and log linear is the best-supported relationship, giving me the underlying model:
+
+$$
 
 
-```{r, fig.height=7, fig.width=12}
+
+
+$$
+
+
+```{r,include=FALSE}
 summary(lnagelm)
 
 
@@ -679,6 +781,10 @@ print(pred.cort)
 UnZage <- exp((NewAge*sd(Cort.Repro$ageln))+mean(Cort.Repro$ageln))
 
 DF<-data.frame(cbind(NewAge,pred.cort,UnZage,Cort.Repro$ageln,Cort.Repro$cort))
+```
+
+
+```{r, fig.height=7, fig.width=12}
 ggplot(data = DF, aes(UnZage,pred.cort))+
   geom_jitter(data = Cort.Repro, aes(age, cort), width = 0.2, alpha=0.5)+
   geom_line(lwd=1.2)+
@@ -724,11 +830,12 @@ Note: This process may change later to simplify results or inferences.
 ### Intercept only model
 
 
-```{r, include=FALSE}
-
+```{r}
 library(lme4)
 library(MuMIn)
 library(DHARMa)
+library(blme)
+
 
 overdisp_fun <- function(model) {
     rdf <- df.residual(model)
@@ -738,6 +845,78 @@ overdisp_fun <- function(model) {
     pval <- pchisq(Pearson.chisq, df=rdf, lower.tail=FALSE)
     c(chisq=Pearson.chisq,ratio=prat,rdf=rdf,p=pval)
 }
+
+```
+
+#### Random effects structure
+
+My models are getting warning messages for singularity and when I look at the output, BearID is accounting for 0 variation. So, below I dig into this further and reach a final decision on whether or not to include BearID as a random effect.
+
+##### No random effect
+
+```{r}
+Cort.Repro$lnCORT <- log(Cort.Repro$cort)
+
+RE00 <- lm(lnCORT~1, data = Cort.Repro)
+RE00.aicc <- AICc(RE00)
+
+RE0 <- lm(lnCORT~bearID, data = Cort.Repro)
+RE0.aicc <- AICc(RE0)
+
+print(RE00.aicc)
+print(RE0.aicc)
+
+RE00.aicc-RE0.aicc
+
+```
+When I run a simple regression on the log-transformed cortisol data and compare a true "intercept only model" with a model that looks at the effect of bearID, the bearID model has a $\Delta AIC_{c}$ = 101.4 units **higher** than the intercept only model
+
+##### comparing random effect structures
+
+
+```{r}
+RE1<- glmer(cort ~1+(1|bearID),
+               data = Cort.Repro,
+               family = gaussian(link = "log"),
+            glmerControl(optimizer = "Nelder_Mead"))
+summary(RE1)
+RE1.aicc <- AICc(RE1)
+
+# Check singularity
+tt <- getME(RE1,"theta")
+ll <- getME(RE1,"lower")
+min(tt[ll==0])
+# It doesn't seem like singularity is a problem in this case
+
+RE1<- blmer(cort ~1+(1|bearID),
+               data = Cort.Repro)
+summary(RE1)
+
+
+RE2<- glmer(cort ~1+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+RE2.aicc <- AICc(RE2)
+
+RE3<- glmer(cort ~1+(1|bearID)+(1|fYR),
+               data = Cort.Repro,
+               family = gaussian(link = "log"))
+RE3.aicc <- AICc(RE3)
+
+print(RE1.aicc)
+print(RE2.aicc)
+print(RE3.aicc)
+
+
+
+
+```
+
+
+#### Running Intercept model
+
+```{r, include=FALSE}
+
 
 
 
