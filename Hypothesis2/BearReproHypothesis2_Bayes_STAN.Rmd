@@ -1,0 +1,745 @@
+---
+title: "BearReproHypothesis2_Bayes_STAN"
+author: "Ashlee Mikkelsen"
+date: "2022-11-24"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+# Introduction
+
+Because the repro data is so messy and confusing and irritating, I have taken Anne's advice and instead of using GLMMs for my initial modelling, I am going to use the package brms and STAN to analyze my models because I was having convergence and singularity issues with lme4. For details on the background and development of hypotheses and individual relationships, see:
+
+C:\Users\amikk\Documents\Rprojects\Diet-and-reproduction-in-rown-bears\Hypothesis2\BearReproHypotheis2\_Freq.RMD
+
+From here, I will be continuing from the mid-point in that analysis, as the frequentist version has become quite messy.
+
+The steps for this version of step 1 (there are several predecessors) are as follows:
+
+1.  Determine the best supported non-linear relationships for covariates that I had hypothesized may be non-linear, such as age, body condition, and $\delta^{15}N$
+
+2.  create univariate models with cortisol as the response variable to determine which of my covariates have support in the data to explain variation in cortisol across individuals. This will help with the interpretation of the PCA and PLSR as well as serve for interesting comparisons.
+
+# Setup
+
+s## load data and packages
+
+```{r, include=FALSE}
+rm(list=ls())
+setwd("~/Rprojects/Diet-and-reproduction-in-rown-bears/Hypothesis2")
+
+
+library(ggplot2)
+library(wiqid)
+library(rstan)
+library(brms)
+library(viridis)
+library(patchwork) # for multi-panel plots
+library(gridExtra)
+
+```
+
+## set graphing theme
+
+```{r, include=FALSE}
+mytheme <- theme(
+    axis.text = element_text(size = 12,face = "bold"),
+    axis.title = element_text(size = 14, face = "bold"),
+    panel.grid.major = element_line(color = "grey92"),
+    panel.grid.minor = element_line(color = "grey96"),
+    panel.background = element_rect(fill = "white"),
+    axis.line = element_line(colour = "black",size = 1),
+    axis.ticks = element_line(size = 1),
+    )
+theme_set(mytheme)
+```
+
+## Load Data
+
+```{r, include=FALSE}
+HP2.dat <- read.csv("BearReproData_H2Analysis.csv")
+
+Cort.Repro <- HP2.dat[,c(1,3,6,10,11,12,13,14,15,16,22,23,26,28)]
+Cort.Repro <- subset(Cort.Repro, reprocat!="Wmother")
+Cort.Repro$bearID<-as.factor(Cort.Repro$bearID)
+
+```
+
+```{r, include=FALSE}
+### Convert ILI from cat. variable to a continuous one
+
+fILI= Cort.Repro$ILI
+
+cILI=rep(0,length(fILI))
+
+for(i in 1:273){
+  if(fILI[i]=="O"){
+    cILI[i]=1
+  }else if (fILI[i]=="TW"){
+    cILI[i]=2
+  }else if (fILI[i]=="TH"){
+    cILI[i]=3
+  }else if (fILI[i]== "FR"){
+    cILI[i]=4
+  }else if (fILI[i]=="FV"){
+    cILI[i]=5
+  }
+}
+cILI
+
+Cort.Repro$cILI= cILI
+
+colSums(is.na(Cort.Repro))
+
+Cort.Repro$lnCORT <- log(Cort.Repro$cort)
+
+```
+
+## Cortisol distribution
+
+```{r, fig.height=6, fig.width=7}
+ggplot(data = Cort.Repro, aes(cort))+
+  geom_histogram(binwidth = sd(Cort.Repro$cort)*0.5)
+
+```
+
+
+```{r, fig.height=6, fig.width=7}
+ggplot(data = Cort.Repro, aes(lnCORT))+
+  geom_histogram(binwidth = sd(Cort.Repro$lnCORT)*0.5)
+
+```
+
+The distribution of our cortisol is highly left-skewed and positive. I will need to either use a Gaussian model with a log-link or a gamma distribution with a log link.
+
+# Side bar 1: Litter variables
+
+Litter CORT and litter condition are missing too many records to include, but did have some interesting implications, so quickly I examine them on their own
+
+```{r, fig.height=8, fig.width=10, echo=FALSE, include=FALSE}
+side.bar1 <- HP2.dat[,c(1,3,6,10,11,12,13,14,15,16,22,23,26,28,29,30)]
+side.bar1 <- subset(side.bar1, reprocat!="Wmother")
+side.bar1 <- subset(side.bar1,littercort!="NA")
+side.bar1 <- subset(side.bar1,littercond>0)
+
+SB.NumVar1 <- side.bar1[,c(2,3,5,11,12,13,14,15,16)]
+```
+
+```{r, include=FALSE}
+P1 <- ggplot(data = side.bar1, aes(condition, littercond))+
+  geom_point()+
+  ylab("Litter Condition")+
+  xlab("Maternal Condition")+
+  geom_smooth(method = "lm")+
+  scale_y_continuous(expand=c(0,0))+
+  scale_x_continuous(expand = c(0,0))+
+  geom_text(label="1",
+            size=7,
+            x=1.7, y=0.8,
+            color="blue2")
+  
+P1
+
+P2 <- ggplot(data = side.bar1, aes(cort, littercort))+
+  geom_point()+
+  ylab("Litter Cortisol")+
+  xlab("Maternal Cortisol")+
+  geom_smooth(method = "lm")+
+  scale_y_continuous(expand=c(0,0))+
+  scale_x_continuous(expand = c(0,0))+
+  geom_text(label="2",
+            size=7,
+            x=25, y=18.5,
+            color="blue2")
+
+P2
+
+
+P3 <- ggplot(data = side.bar1, aes(condition, littercort))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  ylab("Litter CORT")+
+  xlab("Maternal condition")+scale_y_continuous(expand=c(0,0))+
+  scale_x_continuous(expand = c(0,0))+
+  geom_text(label="3",
+            size=7,
+            x=1.8, y=15,
+            color="blue2")
+P3
+
+P4 <- ggplot(data = side.bar1, aes(cort, littercond))+
+  geom_jitter(width=0.15)+
+  geom_smooth(method = "lm")+
+  ylab("Litter Condition")+
+  xlab("Maternal Cortisol")+
+  scale_y_continuous(expand=c(0,0))+
+  scale_x_continuous(expand = c(0,0))+
+  geom_text(label="4",
+            size=7,
+            x=25, y=0.8,
+            color="blue2")
+
+```
+
+```{r, include=TRUE, fig.height=6, fig.width=7, echo=FALSE}
+P14 <- grid.arrange(P1,P2,P3,P4, ncol=2)
+```
+
+
+We can see in panels 1 & 2 that both condition and cortisol are
+correlated between female bears and their litter. This is something we
+would expect, but it is good to see the assumption holds true. But we
+also see that there are some instances of females with high body
+condition and relatively low litter condition. There are some
+interesting things here that are worth returning to and exploring. Maybe
+a bit about maternal trade-offs.
+
+We see in panel 3 that litter cortisol is negatively correlated with
+maternal condition, which means females in poorer condition tend to have
+offspring with higher average cortisol values. In addition, in panel 4,
+we see that females with lower cortisol tend to have litters in better
+condition that females with higher cortisol.
+
+```{r, include=TRUE}
+Year.cort <- subset(HP2.dat, reprocat=="Wmother")
+
+P5 <- ggplot(data = Year.cort, aes(year,cort))+
+  geom_jitter(width = 0.15, size=2, alpha=0.5)+
+  ylab("Offspring cortisol")+
+  scale_x_continuous(limits = c(1995,2015))
+
+
+P6 <- ggplot(data = side.bar1, aes(year,cort))+
+  geom_jitter(width = 0.15, size=2, alpha=0.5)+
+  ylab("Maternal Cortisol")+
+  scale_x_continuous(limits = c(1995,2015))
+```
+
+```{r, include=TRUE, fig.height=4, fig.width=7, echo=FALSE}
+
+P56 <- grid.arrange(P5,P6, ncol=2)
+
+```
+
+This is VERY interesting. There is a clear increase in cortisol over
+time in both females and their litters. The increase for litters looks
+exponential, while females have maybe linear/exponential increases. I
+would love to get my hands on the last several years of data to see if
+this trend continues.
+
+
+# Non-linear covariates
+```{r}
+rm(P1,P2,P3,P4,P5,P6, P14,P56,
+   SB.NumVar1,side.bar1,Year.cort,
+   cILI,fILI,i)
+
+```
+
+
+Below I build covarites to model my hypothesized non-linear relationships:
+age, condition, and $\delta^{15}N$
+
+
+
+```{r, include=FALSE}
+
+Cort.Repro$N15sq <- Cort.Repro$N15^2
+Cort.Repro$N15ln <- log(Cort.Repro$N15)
+
+Cort.Repro$conditionsq <- Cort.Repro$condition^2
+Cort.Repro$conditionln <- log(Cort.Repro$condition)
+
+Cort.Repro$age2<-Cort.Repro$age^2
+Cort.Repro$ageln<-log(Cort.Repro$age)
+
+```
+
+## Z-transform continuous covariates
+
+```{r, include=FALSE}
+Cort.Repro$ageln<-log(Cort.Repro$age)
+Cort.Repro$fYR <- as.factor(Cort.Repro$year)
+Cort.Repro$Zage <- standardize(Cort.Repro$age)
+Cort.Repro$Zagesq <- standardize(Cort.Repro$age2)
+Cort.Repro$Zageln <- standardize(Cort.Repro$ageln)
+Cort.Repro$Zlitsize <- standardize(Cort.Repro$cubsfirstcount)
+Cort.Repro$Zd13C <- standardize(Cort.Repro$C13.suess)
+Cort.Repro$Zd15N <- standardize(Cort.Repro$N15)
+Cort.Repro$Zd15Nsq <- standardize(Cort.Repro$N15sq)
+Cort.Repro$Zd15Nln <- standardize(Cort.Repro$N15ln)
+Cort.Repro$Zcond <- standardize(Cort.Repro$condition)
+Cort.Repro$Zcondsq <- standardize(Cort.Repro$conditionsq)
+Cort.Repro$Zcondln <- standardize(Cort.Repro$conditionln)
+Cort.Repro$Zcort <- standardize(Cort.Repro$cort)
+Cort.Repro$ZcILI <- standardize(Cort.Repro$cILI)
+
+```
+
+### Intercept only
+```{r}
+
+CORTint.gauss<- brm(cort ~1+(1|fYR)+(1|bearID),
+               data = Cort.Repro,
+               family = gaussian(link = "log"),
+              iter = 3000)
+summary(CORTint.gauss)
+options(mc.cores = 1)
+fit1 <- add_criterion(CORTint.gauss, criterion = "loo")
+gc()
+print(fit1$criteria$loo)
+Gaussian.LOOic <- fit1$criteria$loo$estimates[3,1]
+
+CORTint.gamma<- brm(cort ~1+(1|fYR)+(1|bearID),
+               data = Cort.Repro,
+               family = Gamma(link = "log"),
+              iter = 3000)
+summary(CORTint.gamma)
+options(mc.cores = 1)
+fit2 <- add_criterion(CORTint.gamma, criterion = "loo")
+gc()
+print(fit2$criteria$loo)
+Gamma.LOOic <- fit2$criteria$loo$estimates[3,1]
+
+
+
+```
+
+
+
+### d15N
+
+For dN15, I hypothesized that this relationship could be linear,
+quadratic, or log-linear. Therefore I will test these models against one
+another and against the intercept only model
+
+```{r, include=FALSE}
+
+##### Linear
+Lin15N.gamma<- brm(cort ~Zd15N+(1|fYR)+(1|bearID),
+               data = Cort.Repro,
+               family = Gamma(link = "log"),
+              iter = 3000)
+summary(Lin15N.gamma)
+options(mc.cores = 1)
+fit3 <- add_criterion(Lin15N.gamma, criterion = "loo")
+gc()
+print(fit3$criteria$loo)
+Lin15N.LOOic <- fit3$criteria$loo$estimates[3,1]
+
+
+##### Log-Linear
+
+Log15N.gamma<- brm(cort ~Zd15Nln+(1|fYR)+(1|bearID),
+               data = Cort.Repro,
+               family = Gamma(link = "log"),
+              iter = 3000)
+summary(Log15N.gamma)
+options(mc.cores = 1)
+fit4 <- add_criterion(Log15N.gamma, criterion = "loo")
+gc()
+print(fit4$criteria$loo)
+Log15N.LOOic <- fit4$criteria$loo$estimates[3,1]
+
+##### Quadratic
+
+Quad15N.gamma<- brm(cort ~Zd15N+Zd15Nsq+(1|fYR)+(1|bearID),
+               data = Cort.Repro,
+               family = Gamma(link = "log"),
+              iter = 3000)
+summary(Quad15N.gamma)
+options(mc.cores = 1)
+fit5 <- add_criterion(Quad15N.gamma, criterion = "loo")
+gc()
+print(fit5$criteria$loo)
+Quad15N.LOOic <- fit5$criteria$loo$estimates[3,1]
+
+
+```
+
+
+
+```{r}
+print(Gamma.LOOic)
+print(Lin15N.LOOic)
+print(Log15N.LOOic)
+print(Quad15N.LOOic)
+
+summary(Log15N.gamma)
+summary(Lin15N.gamma)
+
+d15N.LOOic.Table <-c(Log15N.LOOic,Lin15N.LOOic,Quad15N.LOOic,Gamma.LOOic)
+
+d15N.LOOic.Table <- data.frame(d15N.LOOic.Table)
+names(d15N.LOOic.Table)[1] <- "LOOic"
+d15N.LOOic.Table$Model <- c("d15N.log",
+                            "d15N.Linear",
+                            "d15N.Quad",
+                            "Gamma.Intercept")
+
+```
+
+
+```{r}
+
+knitr::kable(d15N.LOOic.Table)
+
+
+```
+
+
+According to the bayesian gamma models, the linear relationship is better than the log-linear and the quadratic and it is much better than the intercept only model. Therefore, this is the one I will retain
+
+```{r}
+
+d15N.model <- function(x){
+  exp(1.74+(x*-0.10))
+}
+
+new.d15N <- seq(min(Cort.Repro$Zd15N), max(Cort.Repro$Zd15N), length.out=100)
+
+dN15.predcort <- d15N.model(new.d15N)
+Ad15N <- (new.d15N*sd(Cort.Repro$N15))+mean(Cort.Repro$N15)
+d15N.df <- as.data.frame(cbind(new.d15N, dN15.predcort,Ad15N))
+
+
+```
+
+
+```{r, fig.height=8, fig.width=12}
+ggplot(data = d15N.df, aes(Ad15N, dN15.predcort))+
+  geom_jitter(data = Cort.Repro, aes(N15,cort),
+              alpha=0.5,
+              width = 0.1, 
+              height =0.5 )+
+  geom_line(lwd=1.2)+
+  ylab("Cortisol")+
+  xlab(expression(paste(delta^15, "N (\u2030)", sep = "")))+
+  geom_text(label="beta (N) = - 0.10, SE= 0.03\n delta LOOaic = 19.1 ",
+            x=3.7, y=25, size=6)
+
+```
+
+
+```{r}
+
+rm(fit1,fit2,fit3,fit4,fit5,
+   CORTint.gauss,Log15N.gamma,Quad15N.gamma, Lin15N.gamma)
+
+
+```
+
+
+### Condition
+
+```{r}
+
+##### Linear
+LinCon.gamma<- brm(cort ~Zcond+(1|fYR)+(1|bearID),
+               data = Cort.Repro,
+               family = Gamma(link = "log"),
+              iter = 3000)
+summary(LinCon.gamma)
+options(mc.cores = 1)
+fit1 <- add_criterion(LinCon.gamma, criterion = "loo")
+gc()
+print(fit1$criteria$loo)
+LinCon.LOOic <- fit1$criteria$loo$estimates[3,1]
+
+
+##### Log-Linear
+
+LogCon.gamma<- brm(cort ~Zcondln+(1|fYR)+(1|bearID),
+               data = Cort.Repro,
+               family = Gamma(link = "log"),
+              iter = 3000)
+summary(LogCon.gamma)
+options(mc.cores = 1)
+fit2 <- add_criterion(LogCon.gamma, criterion = "loo")
+gc()
+print(fit2$criteria$loo)
+LogCon.LOOic <- fit2$criteria$loo$estimates[3,1]
+
+##### Quadratic
+
+QuadCon.gamma<- brm(cort ~Zcond+Zcondsq+(1|fYR)+(1|bearID),
+               data = Cort.Repro,
+               family = Gamma(link = "log"),
+              iter = 3000)
+summary(QuadCon.gamma)
+options(mc.cores = 1)
+fit3 <- add_criterion(QuadCon.gamma, criterion = "loo")
+gc()
+print(fit3$criteria$loo)
+QuadCon.LOOic <- fit3$criteria$loo$estimates[3,1]
+
+
+```
+
+
+```{r}
+
+print(Gamma.LOOic)
+print(LinCon.LOOic)
+print(LogCon.LOOic)
+print(QuadCon.LOOic)
+
+Gamma.LOOic-QuadCon.LOOic
+
+summary(QuadCon.gamma)
+```
+
+The quadratic relationship between body condition and cortisol had the most support and performed better than the intercept only model.
+
+
+```{r}
+
+condition.model <- function(x){
+  exp(1.75+(x*0.68)+((x^2)*-0.65))
+}
+
+new.Cond <- seq(min(Cort.Repro$Zcond), max(Cort.Repro$Zcond), length.out=100)
+
+Cond.predcort <- condition.model(new.Cond)
+Acond <- (new.Cond*sd(Cort.Repro$condition))+mean(Cort.Repro$condition)
+cond.df <- as.data.frame(cbind(new.Cond, Cond.predcort,Acond))
+
+
+```
+
+
+```{r, fig.height=8, fig.width=12}
+ggplot(data = cond.df, aes(Acond, Cond.predcort))+
+  geom_jitter(data = Cort.Repro, aes(condition,cort), alpha=0.5,
+              width = 0.01, height =0.05 )+
+  geom_line(lwd=1.2)+
+  ylab("Cortisol")+
+  xlab("Body Condition (mass/skull circumference)")+
+  geom_text(label="beta (BC) = 0.68, SE= 0.19\nbeta (BC^2) = - 0.65, SE =0.19\n delta LOOaic = 7.8 ",
+            x=0.8, y=25, size=6)
+
+```
+
+### Age
+
+```{r}
+
+rm(fit1,fit2,fit3,
+   LogCon.gamma,QuadCon.gamma, LinCon.gamma)
+
+
+```
+
+
+```{r}
+
+##### Linear
+LinAge.gamma<- brm(cort ~Zage+(1|fYR)+(1|bearID),
+               data = Cort.Repro,
+               family = Gamma(link = "log"),
+              iter = 3000)
+summary(LinAge.gamma)
+options(mc.cores = 1)
+fit1 <- add_criterion(LinAge.gamma, criterion = "loo")
+gc()
+print(fit1$criteria$loo)
+LinAge.LOOic <- fit1$criteria$loo$estimates[3,1]
+
+
+##### Log-Linear
+
+LogAge.gamma<- brm(cort ~Zageln+(1|fYR)+(1|bearID),
+               data = Cort.Repro,
+               family = Gamma(link = "log"),
+              iter = 3000)
+summary(LogAge.gamma)
+options(mc.cores = 1)
+fit2 <- add_criterion(LogAge.gamma, criterion = "loo")
+gc()
+print(fit2$criteria$loo)
+LogAge.LOOic <- fit2$criteria$loo$estimates[3,1]
+
+##### Quadratic
+
+QuadAge.gamma<- brm(cort ~Zage+Zagesq+(1|fYR)+(1|bearID),
+               data = Cort.Repro,
+               family = Gamma(link = "log"),
+              iter = 3000)
+summary(QuadAge.gamma)
+options(mc.cores = 1)
+fit3 <- add_criterion(QuadAge.gamma, criterion = "loo")
+gc()
+print(fit3$criteria$loo)
+QuadAge.LOOic <- fit3$criteria$loo$estimates[3,1]
+
+
+```
+
+
+```{r}
+
+print(Gamma.LOOic)
+print(LinAge.LOOic)
+print(LogAge.LOOic)
+print(QuadAge.LOOic)
+
+Gamma.LOOic-QuadAge.LOOic
+
+summary(QuadAge.gamma)
+
+```
+
+The quadratic relationship between age and cortisol had the most support and performed better than the intercept only model.
+
+
+```{r}
+
+age.model <- function(x){
+  exp(1.75+(x*0.49)+((x^2)*-0.39))
+}
+
+new.Age <- seq(min(Cort.Repro$Zage), max(Cort.Repro$Zage), length.out=100)
+
+Age.predcort <- age.model(new.Age)
+AAge <- (new.Age*sd(Cort.Repro$age))+mean(Cort.Repro$age)
+age.df <- as.data.frame(cbind(new.Age, Age.predcort,AAge))
+
+
+```
+
+
+```{r, fig.height=8, fig.width=12}
+ggplot(data = age.df, aes(AAge, Age.predcort))+
+  geom_jitter(data = Cort.Repro, aes(age,cort), alpha=0.5,
+              width = 0.1, height =0.05 )+
+  geom_line(lwd=1.2)+
+  ylab("Cortisol")+
+  xlab("Age")+
+  geom_text(label="beta (AGE) = 0.49, SE= 0.08\nbeta (AGE^2) = - 0.39, SE =0.08\n delta LOOaic = 32.1 ",
+            x=13, y=25, size=6)
+
+```
+
+## Non-linear summary
+
+$\delta^{15}N$ signatures were best modeled by a linear relationship with brown bear hair cortisol. Technically, the log-linear relationship was **VERY** slightly better than the linear, but the difference was so small that I chose to retain the simpler, linear relationship rather than the log-linear one. Meanwhile condition and age were best modeled with the quadratic relationship.
+
+
+# Univariate models for Inference
+
+I have already run the models for nitrogen signatures, condition, and age. I next need to explore the other hypothesized relationships: $\delta^{13}C$, inter-litter interval, litter size, length of maternal care, and parity.
+
+```{r}
+
+rm(AAge,Acond,Ad15N,
+     Gaussian.LOOic, LinAge.LOOic, LinCon.LOOic, Log15N.LOOic,LogAge.LOOic,
+     Quad15N.LOOic, LogCon.LOOic,
+   fit1, fit2,fit3)
+
+```
+
+
+### Carbon
+
+```{r}
+
+Lind13C.gamma<- brm(cort ~Zd13C+(1|fYR)+(1|bearID),
+               data = Cort.Repro,
+               family = Gamma(link = "log"),
+              iter = 3000)
+summary(Lind13C.gamma)
+options(mc.cores = 1)
+fit1 <- add_criterion(Lind13C.gamma, criterion = "loo")
+gc()
+print(fit1$criteria$loo)
+Lind13C.LOOic <- fit1$criteria$loo$estimates[3,1]
+
+Gamma.LOOic-Lind13C.LOOic
+
+summary(Lind13C.gamma)
+
+
+```
+
+There is moderate evidence for a relationship between $\delta^{13}C$ signatures and hair cortisol. The model performed slightly better than the intercept only model, and the confidence interval contained zero.
+
+```{r}
+
+d13C.model <- function(x){
+  exp(1.75+(x*-0.05))
+}
+
+new.d13C <- seq(min(Cort.Repro$Zd13C), max(Cort.Repro$Zd13C), length.out=100)
+
+d13C.predcort <- d13C.model(new.d13C)
+Ad13C <- (new.d13C*sd(Cort.Repro$C13.suess))+mean(Cort.Repro$C13.suess)
+d13C.df <- as.data.frame(cbind(new.d13C, d13C.predcort,Ad13C))
+
+
+```
+
+
+```{r, fig.height=8, fig.width=12}
+ggplot(data = d13C.df, aes(Ad13C, d13C.predcort))+
+  geom_jitter(data = Cort.Repro, aes(C13.suess,cort), alpha=0.5,
+              width = 0.1, height =0.05 )+
+  geom_line(lwd=1.2)+
+  ylab("Cortisol")+
+  xlab(expression(paste(delta^13, "C (\u2030)", sep = "")))+
+  geom_text(label="beta (C13) = - 0.05, SE= 0.03\n delta LOOaic = 1.9 ",
+            x=-22, y=25, size=6)
+
+```
+
+### Inter-litter Interval
+
+```{r}
+
+LinILI.gamma<- brm(cort ~ZcILI+(1|fYR)+(1|bearID),
+               data = Cort.Repro,
+               family = Gamma(link = "log"),
+              iter = 3000)
+options(mc.cores = 1)
+fit2 <- add_criterion(LinILI.gamma, criterion = "loo")
+gc()
+print(fit2$criteria$loo)
+LincILI.LOOic <- fit2$criteria$loo$estimates[3,1]
+
+Gamma.LOOic-LincILI.LOOic
+
+summary(LinILI.gamma)
+
+```
+
+There is strong evidence for a relationship between inter-litter interval and hair cortisol. The model performed much better than the intercept only model and the confidence interval did not contain zero.
+
+```{r}
+
+ILI.model <- function(x){
+  exp(1.75+(x*0.11))
+}
+
+new.ILI <- seq(min(Cort.Repro$ZcILI), max(Cort.Repro$ZcILI), length.out=100)
+
+ILI.predcort <- ILI.model(new.ILI)
+AILI <- (new.ILI*sd(Cort.Repro$cILI))+mean(Cort.Repro$cILI)
+ILI.df <- as.data.frame(cbind(new.ILI, ILI.predcort,AILI))
+
+
+```
+
+
+```{r, fig.height=8, fig.width=12}
+ggplot(data = ILI.df, aes(AILI, ILI.predcort))+
+  geom_jitter(data = Cort.Repro, aes(cILI,cort), alpha=0.5,
+              width = 0.1, height =0.05 )+
+  geom_line(lwd=1.2)+
+  ylab("Cortisol")+
+  xlab("Inter-litter Interval")+
+  geom_text(label="beta (ILI) = 0.11, SE= 0.02\n delta LOOaic = 15.8 ",
+            x=3, y=25, size=6)
+
+```
