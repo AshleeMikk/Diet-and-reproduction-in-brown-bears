@@ -276,11 +276,13 @@ Cort.Repro$Zcondsq <- standardize(Cort.Repro$conditionsq)
 Cort.Repro$Zcondln <- standardize(Cort.Repro$conditionln)
 Cort.Repro$Zcort <- standardize(Cort.Repro$cort)
 Cort.Repro$ZcILI <- standardize(Cort.Repro$cILI)
+Cort.Repro$LMC <- as.factor(Cort.Repro$weaningage)
+Cort.Repro$Parity <- as.factor(Cort.Repro$statut)
 
 ```
 
 ### Intercept only
-```{r}
+```{r, include=FALSE}
 
 CORTint.gauss<- brm(cort ~1+(1|fYR)+(1|bearID),
                data = Cort.Repro,
@@ -302,13 +304,14 @@ options(mc.cores = 1)
 fit2 <- add_criterion(CORTint.gamma, criterion = "loo")
 gc()
 print(fit2$criteria$loo)
+
 Gamma.LOOic <- fit2$criteria$loo$estimates[3,1]
 
 
 
 ```
 
-
+The gamma model with the log link, with only the intercept and random effects of bearID and year performed better than the gaussian model. Therefore, all future models will be run with a gamma distribution and a log link
 
 ### d15N
 
@@ -362,7 +365,7 @@ Quad15N.LOOic <- fit5$criteria$loo$estimates[3,1]
 
 
 
-```{r}
+```{r, include=FALSE}
 print(Gamma.LOOic)
 print(Lin15N.LOOic)
 print(Log15N.LOOic)
@@ -370,6 +373,7 @@ print(Quad15N.LOOic)
 
 summary(Log15N.gamma)
 summary(Lin15N.gamma)
+
 
 d15N.LOOic.Table <-c(Log15N.LOOic,Lin15N.LOOic,Quad15N.LOOic,Gamma.LOOic)
 
@@ -387,30 +391,31 @@ d15N.LOOic.Table$Model <- c("d15N.log",
 
 knitr::kable(d15N.LOOic.Table)
 
-
 ```
 
 
-According to the bayesian gamma models, the linear relationship is better than the log-linear and the quadratic and it is much better than the intercept only model. Therefore, this is the one I will retain
+According to the bayesian gamma models, the log-linear relationship is better than the linear and the quadratic and it is much better than the intercept only model. Therefore, this is the one I will retain
 
-```{r}
+```{r, include=FALSE}
 
 d15N.model <- function(x){
   exp(1.74+(x*-0.10))
 }
 
-new.d15N <- seq(min(Cort.Repro$Zd15N), max(Cort.Repro$Zd15N), length.out=100)
+new.d15N <- seq(min(Cort.Repro$Zd15Nln), max(Cort.Repro$Zd15Nln),
+                length.out=100)
 
 dN15.predcort <- d15N.model(new.d15N)
-Ad15N <- (new.d15N*sd(Cort.Repro$N15))+mean(Cort.Repro$N15)
-d15N.df <- as.data.frame(cbind(new.d15N, dN15.predcort,Ad15N))
+Ad15N <- (new.d15N*sd(Cort.Repro$N15ln))+mean(Cort.Repro$N15ln)
+UnLog.Ad15N <- exp(Ad15N)
+d15N.df <- as.data.frame(cbind(new.d15N, dN15.predcort,UnLog.Ad15N))
 
 
 ```
 
 
-```{r, fig.height=8, fig.width=12}
-ggplot(data = d15N.df, aes(Ad15N, dN15.predcort))+
+```{r, fig.height=6, fig.width=7}
+ggplot(data = d15N.df, aes(UnLog.Ad15N, dN15.predcort))+
   geom_jitter(data = Cort.Repro, aes(N15,cort),
               alpha=0.5,
               width = 0.1, 
@@ -419,12 +424,12 @@ ggplot(data = d15N.df, aes(Ad15N, dN15.predcort))+
   ylab("Cortisol")+
   xlab(expression(paste(delta^15, "N (\u2030)", sep = "")))+
   geom_text(label="beta (N) = - 0.10, SE= 0.03\n delta LOOaic = 19.1 ",
-            x=3.7, y=25, size=6)
+            x=4, y=25, size=5)
 
 ```
 
 
-```{r}
+```{r, include=FALSE}
 
 rm(fit1,fit2,fit3,fit4,fit5,
    CORTint.gauss,Log15N.gamma,Quad15N.gamma, Lin15N.gamma)
@@ -435,7 +440,7 @@ rm(fit1,fit2,fit3,fit4,fit5,
 
 ### Condition
 
-```{r}
+```{r, include=FALSE}
 
 ##### Linear
 LinCon.gamma<- brm(cort ~Zcond+(1|fYR)+(1|bearID),
@@ -495,7 +500,7 @@ summary(QuadCon.gamma)
 The quadratic relationship between body condition and cortisol had the most support and performed better than the intercept only model.
 
 
-```{r}
+```{r, include=FALSE}
 
 condition.model <- function(x){
   exp(1.75+(x*0.68)+((x^2)*-0.65))
@@ -511,7 +516,7 @@ cond.df <- as.data.frame(cbind(new.Cond, Cond.predcort,Acond))
 ```
 
 
-```{r, fig.height=8, fig.width=12}
+```{r, fig.height=6, fig.width=7}
 ggplot(data = cond.df, aes(Acond, Cond.predcort))+
   geom_jitter(data = Cort.Repro, aes(condition,cort), alpha=0.5,
               width = 0.01, height =0.05 )+
@@ -519,13 +524,13 @@ ggplot(data = cond.df, aes(Acond, Cond.predcort))+
   ylab("Cortisol")+
   xlab("Body Condition (mass/skull circumference)")+
   geom_text(label="beta (BC) = 0.68, SE= 0.19\nbeta (BC^2) = - 0.65, SE =0.19\n delta LOOaic = 7.8 ",
-            x=0.8, y=25, size=6)
+            x=1, y=25, size=5)
 
 ```
 
 ### Age
 
-```{r}
+```{r, include=FALSE}
 
 rm(fit1,fit2,fit3,
    LogCon.gamma,QuadCon.gamma, LinCon.gamma)
@@ -534,7 +539,7 @@ rm(fit1,fit2,fit3,
 ```
 
 
-```{r}
+```{r, include=FALSE}
 
 ##### Linear
 LinAge.gamma<- brm(cort ~Zage+(1|fYR)+(1|bearID),
@@ -595,7 +600,7 @@ summary(QuadAge.gamma)
 The quadratic relationship between age and cortisol had the most support and performed better than the intercept only model.
 
 
-```{r}
+```{r, include=FALSE}
 
 age.model <- function(x){
   exp(1.75+(x*0.49)+((x^2)*-0.39))
@@ -611,7 +616,7 @@ age.df <- as.data.frame(cbind(new.Age, Age.predcort,AAge))
 ```
 
 
-```{r, fig.height=8, fig.width=12}
+```{r, fig.height=6, fig.width=7}
 ggplot(data = age.df, aes(AAge, Age.predcort))+
   geom_jitter(data = Cort.Repro, aes(age,cort), alpha=0.5,
               width = 0.1, height =0.05 )+
@@ -619,7 +624,7 @@ ggplot(data = age.df, aes(AAge, Age.predcort))+
   ylab("Cortisol")+
   xlab("Age")+
   geom_text(label="beta (AGE) = 0.49, SE= 0.08\nbeta (AGE^2) = - 0.39, SE =0.08\n delta LOOaic = 32.1 ",
-            x=13, y=25, size=6)
+            x=13, y=25, size=5)
 
 ```
 
@@ -632,7 +637,7 @@ $\delta^{15}N$ signatures were best modeled by a linear relationship with brown 
 
 I have already run the models for nitrogen signatures, condition, and age. I next need to explore the other hypothesized relationships: $\delta^{13}C$, inter-litter interval, litter size, length of maternal care, and parity.
 
-```{r}
+```{r, include=FALSE}
 
 rm(AAge,Acond,Ad15N,
      Gaussian.LOOic, LinAge.LOOic, LinCon.LOOic, Log15N.LOOic,LogAge.LOOic,
@@ -644,7 +649,7 @@ rm(AAge,Acond,Ad15N,
 
 ### Carbon
 
-```{r}
+```{r, include=FALSE}
 
 Lind13C.gamma<- brm(cort ~Zd13C+(1|fYR)+(1|bearID),
                data = Cort.Repro,
@@ -666,7 +671,7 @@ summary(Lind13C.gamma)
 
 There is moderate evidence for a relationship between $\delta^{13}C$ signatures and hair cortisol. The model performed slightly better than the intercept only model, and the confidence interval contained zero.
 
-```{r}
+```{r, include=FALSE}
 
 d13C.model <- function(x){
   exp(1.75+(x*-0.05))
@@ -682,7 +687,8 @@ d13C.df <- as.data.frame(cbind(new.d13C, d13C.predcort,Ad13C))
 ```
 
 
-```{r, fig.height=8, fig.width=12}
+```{r, fig.height=6, fig.width=7}
+
 ggplot(data = d13C.df, aes(Ad13C, d13C.predcort))+
   geom_jitter(data = Cort.Repro, aes(C13.suess,cort), alpha=0.5,
               width = 0.1, height =0.05 )+
@@ -690,13 +696,13 @@ ggplot(data = d13C.df, aes(Ad13C, d13C.predcort))+
   ylab("Cortisol")+
   xlab(expression(paste(delta^13, "C (\u2030)", sep = "")))+
   geom_text(label="beta (C13) = - 0.05, SE= 0.03\n delta LOOaic = 1.9 ",
-            x=-22, y=25, size=6)
+            x=-22, y=25, size=5)
 
 ```
 
 ### Inter-litter Interval
 
-```{r}
+```{r, include=FALSE}
 
 LinILI.gamma<- brm(cort ~ZcILI+(1|fYR)+(1|bearID),
                data = Cort.Repro,
@@ -716,7 +722,7 @@ summary(LinILI.gamma)
 
 There is strong evidence for a relationship between inter-litter interval and hair cortisol. The model performed much better than the intercept only model and the confidence interval did not contain zero.
 
-```{r}
+```{r, include=FALSE}
 
 ILI.model <- function(x){
   exp(1.75+(x*0.11))
@@ -732,14 +738,159 @@ ILI.df <- as.data.frame(cbind(new.ILI, ILI.predcort,AILI))
 ```
 
 
-```{r, fig.height=8, fig.width=12}
+```{r, fig.height=6, fig.width=7}
+
 ggplot(data = ILI.df, aes(AILI, ILI.predcort))+
   geom_jitter(data = Cort.Repro, aes(cILI,cort), alpha=0.5,
-              width = 0.1, height =0.05 )+
-  geom_line(lwd=1.2)+
+              width = 0.1, height =0.05, color="#453781FF" )+
+  geom_line(lwd=1.2,color="#453781FF" )+
   ylab("Cortisol")+
   xlab("Inter-litter Interval")+
   geom_text(label="beta (ILI) = 0.11, SE= 0.02\n delta LOOaic = 15.8 ",
-            x=3, y=25, size=6)
+            x=3, y=25, size=5)
 
 ```
+
+
+### Litter size
+
+```{r, include=FALSE}
+
+LinLS.gamma<- brm(cort ~Zlitsize+(1|fYR)+(1|bearID),
+               data = Cort.Repro,
+               family = Gamma(link = "log"),
+              iter = 3000)
+options(mc.cores = 1)
+fit3 <- add_criterion(LinLS.gamma, criterion = "loo")
+gc()
+print(fit3$criteria$loo)
+LinLS.LOOic <- fit3$criteria$loo$estimates[3,1]
+
+Gamma.LOOic-LinLS.LOOic
+
+summary(LinLS.gamma)
+
+```
+
+There is strong evidence for an effect of litter size on the brown bear hair cortisol. The model performed much better than the intercept only and the confidence interval did not contain zero
+
+```{r, include=FALSE}
+
+LS.model <- function(x){
+  exp(1.74+(x*0.16))
+}
+
+new.LS <- seq(min(Cort.Repro$Zlitsize),
+              max(Cort.Repro$Zlitsize), length.out=100)
+
+LS.predcort <- LS.model(new.LS)
+ALS <- (new.LS*sd(Cort.Repro$cubsfirstcount))+mean(Cort.Repro$cubsfirstcount)
+LS.df <- as.data.frame(cbind(new.LS, LS.predcort,ALS))
+
+
+```
+
+
+
+```{r, fig.height=6, fig.width=7}
+
+ggplot(data = LS.df, aes(ALS, LS.predcort))+
+  geom_jitter(data = Cort.Repro, aes(cubsfirstcount,cort), alpha=0.5,
+              width = 0.1, height =0.05, color="#238A8DFF")+
+  geom_line(lwd=1.2,color="#238A8DFF")+
+  ylab("Cortisol")+
+  xlab("Litter size")+
+  geom_text(label="beta (LS) = 0.16, SE= 0.02\n delta LOOaic = 45.2 ",
+            x=3, y=25, size=5)
+
+```
+
+
+### Length Maternal care
+
+
+```{r, include=FALSE}
+
+LinLMC.gamma<- brm(cort ~LMC+(1|fYR)+(1|bearID),
+               data = Cort.Repro,
+               family = Gamma(link = "log"),
+              iter = 3000)
+options(mc.cores = 1)
+fit4 <- add_criterion(LinLMC.gamma, criterion = "loo")
+gc()
+print(fit4$criteria$loo)
+LinLMC.LOOic <- fit4$criteria$loo$estimates[3,1]
+
+Gamma.LOOic-LinLMC.LOOic
+
+summary(LinLMC.gamma)
+
+```
+
+Again, strong evidence for an effect, with the LMC model out performing the intercept only model and confidence intervals not overlapping zero
+
+
+```{r, fig.height=6, fig.width=7}
+
+ggplot(data = Cort.Repro, aes(LMC, cort))+
+  geom_jitter(aes(color=LMC), width = 0.1, height = 0.01)+
+  geom_boxplot(aes(fill=LMC), alpha=0.6)+
+  ylab("Cortisol")+
+  xlab("Length Maternal Care")+
+  geom_text(label="delta LOOaic = 60.5 ",
+            x=3, y=25, size=5)+
+  scale_fill_viridis(discrete = TRUE)+
+    scale_color_viridis(discrete = TRUE)
+
+```
+
+
+### Parity
+
+```{r, include=FALSE}
+
+LinParity.gamma<- brm(cort ~Parity+(1|fYR)+(1|bearID),
+               data = Cort.Repro,
+               family = Gamma(link = "log"),
+              iter = 3000)
+options(mc.cores = 1)
+fit5 <- add_criterion(LinParity.gamma, criterion = "loo")
+gc()
+print(fit5$criteria$loo)
+LinParity.LOOic <- fit5$criteria$loo$estimates[3,1]
+
+Gamma.LOOic-LinParity.LOOic
+
+summary(LinParity.gamma)
+
+Q <- palette(viridis(3))
+Q <- palette(viridis(3))
+
+```
+
+
+```{r, fig.height=6, fig.width=7}
+
+ggplot(data = Cort.Repro, aes(Parity, cort))+
+  geom_jitter(aes(color=Parity), width = 0.1, height = 0.01)+
+  geom_boxplot(aes(fill=Parity), alpha=0.6)+
+  ylab("Cortisol")+
+  xlab("Parity")+
+  geom_text(label="delta LOOaic = 53.6 ",
+            x=2, y=25, size=5)+
+  scale_fill_viridis(discrete = TRUE)+
+    scale_color_manual(values = c(Q[1],Q[2],Q[3]),
+                       breaks=c("M", "P","N"),
+                       label=c("Multiparous", "Primiparous", "No known repro"))+
+  scale_fill_manual(values = c(Q[1],Q[2],Q[3]),
+                       breaks=c("M", "P","N"),
+                       label=c("Multiparous", "Primiparous", "No known repro"))
+
+```
+
+# Univariate model summary
+
+None of the variables that I tested failed to outperform the intercept only model.
+
+Length of maternal care explained the most variation in the data, followed by parity, litter size, age, $\delta^{15}N$, Interlitter interval, body condition, and $\delta^{13}C$
+
