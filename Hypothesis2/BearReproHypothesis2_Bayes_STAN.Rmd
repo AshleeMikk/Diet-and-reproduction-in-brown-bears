@@ -894,3 +894,5 @@ None of the variables that I tested failed to outperform the intercept only mode
 
 Length of maternal care explained the most variation in the data, followed by parity, litter size, age, $\delta^{15}N$, Interlitter interval, body condition, and $\delta^{13}C$
 
+As a result, I will use all continuous variables in the next phase of modelling, which is the PCA analysis and the PLSR.
+
