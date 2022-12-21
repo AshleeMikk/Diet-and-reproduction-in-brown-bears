@@ -1511,7 +1511,7 @@ It is evident in all of my graphs that individually each covariate does a fairly
 
 ```{r}
 
-Nitroint.gauss<- brm(N15 ~1+(1|fYR)+(1|bearID),
+Nitroint.gauss<- brm(Zd15N ~1+(1|fYR)+(1|bearID),
                data = Cort.Repro,
                family = gaussian,
               iter = 6000,
@@ -1522,6 +1522,20 @@ fitN1 <- add_criterion(Nitroint.gauss, criterion = "loo")
 gc()
 print(fitN1$criteria$loo)
 NitroGaussian.LOOic <- fitN1$criteria$loo$estimates[3,1]
+
+launch_shinystan(Nitroint.gauss)
+plot(Nitroint.gauss)
+plot(loo(Nitroint.gauss, cores = getOption("mc.cores", 1)))
+
+```
+
+I need to check the residuals/predictive errors for this intercept only model
+```{r}
+Int.error <- predictive_error(Nitroint.gauss)
+
+str(Int.error)
+
+
 
 ```
 
@@ -1554,71 +1568,464 @@ options(mc.cores = 1)
 fitN3 <- add_criterion(LinCORT.gauss, criterion = "loo")
 gc()
 print(fitN3$criteria$loo)
-N.LinCORT.LOOic <- fitN3$criteria$loo$estimates[3,1]
+CORT.Nlin.LOOic <- fitN3$criteria$loo$estimates[3,1]
 
 
 ##### Log-Linear
 
-Log15N.gamma<- brm(cort ~Zd15Nln+(1|fYR)+(1|bearID),
+LogCORT.gauss<- brm(Zd15N~Zcortln+(1|fYR)+(1|bearID),
                data = Cort.Repro,
-               family = Gamma(link = "log"),
-              iter = 3000)
-summary(Log15N.gamma)
+               family = gaussian(),
+              iter = 6000,
+              thin = 10)
+summary(LogCORT.gauss)
 options(mc.cores = 1)
-fit4 <- add_criterion(Log15N.gamma, criterion = "loo")
+fitN4 <- add_criterion(LogCORT.gauss, criterion = "loo")
 gc()
-print(fit4$criteria$loo)
-Log15N.LOOic <- fit4$criteria$loo$estimates[3,1]
+print(fitN4$criteria$loo)
+CORT.Nlog.LOOic <- fitN4$criteria$loo$estimates[3,1]
 
 ##### Quadratic
 
-Quad15N.gamma<- brm(cort ~Zd15N+Zd15Nsq+(1|fYR)+(1|bearID),
+QuadCORT.gauss<- brm(Zd15N~Zcort+Zcortsq+(1|fYR)+(1|bearID),
                data = Cort.Repro,
-               family = Gamma(link = "log"),
+               family = gaussian(),
               iter = 6000,
               thin = 10)
-summary(Quad15N.gamma)
+summary(QuadCORT.gauss)
 options(mc.cores = 1)
-fit5 <- add_criterion(Quad15N.gamma, criterion = "loo")
+fitN5 <- add_criterion(QuadCORT.gauss, criterion = "loo")
 gc()
-print(fit5$criteria$loo)
-Quad15N.LOOic <- fit5$criteria$loo$estimates[3,1]
-
+print(fitN5$criteria$loo)
+CORT.Nquad.LOOic <- fitN5$criteria$loo$estimates[3,1]
 
 ```
 
 
 
 ```{r, include=FALSE, eval=FALSE}
-print(Gamma.LOOic)
-print(Lin15N.LOOic)
-print(Log15N.LOOic)
-print(Quad15N.LOOic)
+print(CORT.Nlin.LOOic)
+print(CORT.Nlog.LOOic)
+print(CORT.Nquad.LOOic)
+print(NitroGaussian.LOOic)
 
-summary(Log15N.gamma)
-summary(Lin15N.gamma)
+summary(QuadCORT.gauss)
+
+print(NitroGaussian.LOOic-CORT.Nquad.LOOic)
+
+print(CORT.Nlog.LOOic-CORT.Nquad.LOOic)
+
+```
+
+Not surprising, given the cortisol analysis I had previously conducted, the quadratic relationship between cortisol and $\delta^{15}N$ had the most support. It had a $\Delta LOOic = 33.22$ units lower than the intercept only model and  13.94 $\Delta LOOic$ units lower than the next-best structure (log-linear). The underlying model can be written as:
+
+$$\delta^{15}N= 0.01+(-0.16*cortisol)+(0.26*cortisol^2)$$
+
+Not only did the model explain more variation than the intercept only, but neither of the 95% credible intervals for the $\beta$ estimates contained zero
+
+```{r}
+
+Nitro.Cort <- function(x){
+  0.01+(-0.16*x)+(0.26*x^2)
+}
+
+New.Ncort <- seq(min(Cort.Repro$Zcort),
+                 max(Cort.Repro$Zcort),
+                 length.out=273)
+New.Ncort
+
+PredNitro.Cort <- Nitro.Cort(New.Ncort)
+
+plot(New.Ncort,PredNitro.Cort)
+
+ANew.Ncort <- (New.Ncort*sd(Cort.Repro$cort))+
+  mean(Cort.Repro$cort)
+APredNitro.CORT <- (PredNitro.Cort*sd(Cort.Repro$N15))+mean(Cort.Repro$N15)
+
+Nitro.Cort.DF <- as.data.frame(cbind(New.Ncort,
+                                     ANew.Ncort,
+                                     PredNitro.Cort,
+                                     APredNitro.CORT,
+                                     Cort.Repro$cort,
+                                     Cort.Repro$N15,
+                                     Cort.Repro$Zd15N,
+                                     Cort.Repro$Zcort))
+```
 
 
-d15N.LOOic.Table <-c(Log15N.LOOic,Lin15N.LOOic,Quad15N.LOOic,Gamma.LOOic)
+```{r, fig.height=5, fig.width=5, fig.cap="Fitted relationship of cortisol predicting nitrogen signatures with observed values as points"}
 
-d15N.LOOic.Table <- data.frame(d15N.LOOic.Table)
-names(d15N.LOOic.Table)[1] <- "LOOic"
-d15N.LOOic.Table$Model <- c("d15N.log",
-                            "d15N.Linear",
-                            "d15N.Quad",
-                            "Gamma.Intercept")
+ggplot(data = Nitro.Cort.DF, aes(ANew.Ncort,APredNitro.CORT))+
+  geom_line(lwd=1.2)+
+  geom_point(aes(V5,V6), size=2, alpha=0.45)+
+  ylab(expression(paste(delta^15, "N (\u2030)", sep = "")))+
+  xlab("cortisol  ( pg/mg )")+
+  scale_y_continuous(expand = c(0,0))+
+  scale_x_continuous(expand = c(0,0))
+
+```
+
+#### Age
+
+Bear age may have large effects on diet, and therefore $\delta^{15}N$ signatures as metabolism, energetic demands, and social dominance change through a bear's life. 
+  Under one scenario, young bears (2-4 ish) are still rapidly growing and need protein to build muscle, hair, and organs. Thus, they may forage heavily on protein-rich foods, elevating their $\delta^{15}N$ signature. This relationship could manifest as either a negative linear trend in which protein demands decrease at a constant rate each year. It may also be log-linear, in which demands rapidly decrease over the first years of a bears life and then hit a pseudo-threshold around 8 when adult size is approximately reached.
+  In contrast to this hypothesis, as bears get older, better social status, hunting experience, and landscape knowledge may improve a bear's ability to exploit certain foods over others. Thus, $\delta^{15}N$ signatures may increase with age. I expect that this relationship may manifest it's self as a positive linear or log-linear relationship. The linear relationship would account for a steady accumulation of knowledge and status each year. The log-linear relationship would result from a rapid accumulation over the first years of life, eventually tapering to a threshold. 
+  **Note**, there are several twists to this relationship that need to be considered. First, offspring have higher $\delta^{15}N$ signatures than dams, therefore in the youngest age categories, newly independent bears may have an inflated nitrogen signature related to nursing rather than foraging decisions or availability. Thus, the relationship could also be represented by a quadratic, where $\delta^{15}N declines for a year or two before rapidly increasing with age. Second, the above hypotheses do not account for changes in reproductive status, which will inevitably affect protein demands and foraging choices.
+  
+Below I explore the relationship between $\delta^{15}N$ and age to determine what shape (linear, log-linear, or quadratic).
+
+```{r, include=FALSE, eval=FALSE}
+
+##### Linear
+LinAge.gauss<- brm(Zd15N~Zage+(1|fYR)+(1|bearID),
+               data = Cort.Repro,
+               family = gaussian(),
+               iter = 6000,
+               thin = 10)
+
+summary(LinAge.gauss)
+options(mc.cores = 1)
+fitN6 <- add_criterion(LinAge.gauss, criterion = "loo")
+gc()
+print(fitN6$criteria$loo)
+Age.Nlin.LOOic <- fitN6$criteria$loo$estimates[3,1]
+
+
+##### Log-Linear
+
+LogAge.gauss<- brm(Zd15N~Zageln+(1|fYR)+(1|bearID),
+               data = Cort.Repro,
+               family = gaussian(),
+              iter = 6000,
+              thin = 10)
+summary(LogAge.gauss)
+options(mc.cores = 1)
+fitN7 <- add_criterion(LogAge.gauss, criterion = "loo")
+gc()
+print(fitN7$criteria$loo)
+Age.Nlog.LOOic <- fitN7$criteria$loo$estimates[3,1]
+
+##### Quadratic
+
+QuadAge.gauss<- brm(Zd15N~Zage+Zagesq+(1|fYR)+(1|bearID),
+               data = Cort.Repro,
+               family = gaussian(),
+              iter = 6000,
+              thin = 10)
+summary(QuadAge.gauss)
+options(mc.cores = 1)
+fitN8 <- add_criterion(QuadAge.gauss, criterion = "loo")
+gc()
+print(fitN8$criteria$loo)
+Age.Nquad.LOOic <- fitN8$criteria$loo$estimates[3,1]
 
 ```
 
 
-```{r, include=FALSE,eval=FALSE}
 
-knitr::kable(d15N.LOOic.Table)
+```{r, include=FALSE, eval=FALSE}
+print(Age.Nlin.LOOic)
+print(Age.Nlog.LOOic)
+print(Age.Nquad.LOOic)
+print(NitroGaussian.LOOic)
+
+summary(QuadAge.gauss)
+
+print(NitroGaussian.LOOic-Age.Nquad.LOOic)
+
+print(Age.Nlog.LOOic-Age.Nquad.LOOic)
 
 ```
 
+Based on the model comparison, the quadratic relationship was the best one describing the affect of age on $\delta^{15}N$ signatures. The quadratic model explained more variation in the data than the intercept only model ($\Delta LOOic = 5.8$) and the 95% credible intervals for both beta estimates exclude zero. However, the quadratic relationship barely out-performed the log linear model ($\Delta LOOic = 0.54$), which I interpret to mean there is only moderate support for the quadratic. This is likely do to decreasing sample sizes for bears older than 10 years, and the true shape of the relationship at the upper end of age is unclear.
+
+
+```{r}
+
+Nitro.Age <- function(x){
+  0.03+(-0.51*x)+(0.50*x^2)
+}
+
+New.Nage <- seq(min(Cort.Repro$Zage),
+                 max(Cort.Repro$Zage),
+                 length.out=273)
+
+PredNitro.Age <- Nitro.Age(New.Nage)
+
+ANew.NAge <- (New.Nage*sd(Cort.Repro$age))+
+  mean(Cort.Repro$age)
+APredNitro.Age <- (PredNitro.Age*sd(Cort.Repro$N15))+
+  mean(Cort.Repro$N15)
+
+Nitro.Age.DF <- as.data.frame(cbind(New.Nage,
+                                     ANew.NAge,
+                                     PredNitro.Age,
+                                     APredNitro.Age,
+                                     Cort.Repro$cort,
+                                     Cort.Repro$N15,
+                                     Cort.Repro$Zd15N,
+                                     Cort.Repro$Zage))
+```
+
+
+```{r, fig.height=5, fig.width=5, fig.cap="Fitted relationship of age predicting nitrogen signatures with observed values as points"}
+
+ggplot(data = Nitro.Age.DF, aes(ANew.NAge,APredNitro.Age))+
+  geom_line(lwd=1.2)+
+  geom_point(aes(V5,V6), size=2, alpha=0.45)+
+  ylab(expression(paste(delta^15, "N (\u2030)", sep = "")))+
+  xlab("Bear age")+
+  scale_y_continuous(expand = c(0,0))+
+  scale_x_continuous(expand = c(0,0))
+
+```
+
+#### Female body condition
+
+Body condition is a continuous variable calculated by dividing mass by skull circumference. In this way, it helps to control for structural size differences between bears skewing mass. In this way it attempts to measure stored resources, such as fat, lean mass, and organ tissues. Bear with more energy stores are likely to be foraging at higher trophic levels, thus The relationship may be a positive linear relationship. We may also see body condition increase with increasing $\delta^{15}N$ signatures to a certain threshold, and then plateau in a log-linear relationship. 
+
+
+```{r, include=FALSE, eval=FALSE}
+
+##### Linear
+LinBC.gauss<- brm(Zd15N~Zcond+(1|fYR)+(1|bearID),
+               data = Cort.Repro,
+               family = gaussian(),
+               iter = 6000,
+               thin = 10)
+options(mc.cores = 1)
+fitN11 <- add_criterion(LinBC.gauss, criterion = "loo")
+gc()
+print(fitN11$criteria$loo)
+BC.Nlin.LOOic <- fitN11$criteria$loo$estimates[3,1]
+
+
+##### Log-Linear
+
+LogBC.gauss<- brm(Zd15N~Zcondln+(1|fYR)+(1|bearID),
+               data = Cort.Repro,
+               family = gaussian(),
+              iter = 6000,
+              thin = 10)
+options(mc.cores = 1)
+fitN11 <- add_criterion(LogBC.gauss, criterion = "loo")
+gc()
+print(fitN11$criteria$loo)
+BC.Nlog.LOOic <- fitN7$criteria$loo$estimates[3,1]
+
+```
+
+
+
+```{r, include=FALSE, eval=FALSE}
+print(BC.Nlin.LOOic)
+print(BC.Nlog.LOOic)
+print(NitroGaussian.LOOic)
+
+summary(LinBC.gauss)
+
+print(NitroGaussian.LOOic-BC.Nlin.LOOic)
+
+print(BC.Nlog.LOOic-BC.Nlin.LOOic)
+
+```
+
+The linear model performed better than the log-linear model ($\Delta LOOic = 14.0$).
+
+```{r}
+
+Nitro.BC <- function(x){
+  0.02+(0.25*x)
+}
+
+New.Nbc <- seq(min(Cort.Repro$Zcond),
+                 max(Cort.Repro$Zcond),
+                 length.out=273)
+
+PredNitro.BC <- Nitro.BC(New.Nbc)
+
+ANew.Nbc <- (New.Nbc*sd(Cort.Repro$condition))+
+  mean(Cort.Repro$condition)
+APredNitro.BC <- (PredNitro.BC*sd(Cort.Repro$N15))+
+  mean(Cort.Repro$N15)
+
+Nitro.Cond.DF <- as.data.frame(cbind(New.Nbc,
+                                     ANew.Nbc,
+                                     PredNitro.BC,
+                                     APredNitro.BC,
+                                     Cort.Repro$condition,
+                                     Cort.Repro$N15,
+                                     Cort.Repro$Zd15N,
+                                     Cort.Repro$Zcond))
+```
+
+
+```{r, fig.height=5, fig.width=5, fig.cap="Fitted relationship of female body condition predicting nitrogen signatures with observed values as points"}
+
+ggplot(data = Nitro.Cond.DF, aes(ANew.Nbc,APredNitro.BC))+
+  geom_line(lwd=1.2)+
+  geom_point(aes(V5,V6), size=2, alpha=0.45)+
+  ylab(expression(paste(delta^15, "N (\u2030)", sep = "")))+
+  xlab("Female body condition (kg/cm)")+
+  scale_y_continuous(expand = c(0,0))+
+  scale_x_continuous(expand = c(0,0))
+
+```
+
+
+There is evidence for a positive relationship between body condition and $\delta^{15}N$ signatures. The model with the effect of body condition explained more variation in the data than the intercept alone ($\Delta LOOic = 19.3$) and 95% credible intervals around $\hat\beta_{COND}$ did not contain zero. 
 
 ### linear relationships
+
+#### Year
+Year can function as either a categorical variable accounting for annual environmental variation that is unaccounted for in the model related to the millions of environmental variables that are unmeasured. It can also be modeled as a continuous variable to test for a temporal trend. This is a bit problematic with mt data because I do not have an even sampling distribution across years:
+
+```{r, fig.height=5, fig.width=5, fig.cap="Distribution of sample sizes by year"}
+
+ggplot(data = Cort.Repro, aes(year))+
+  geom_histogram(binwidth = 1)+
+  scale_y_continuous(expand = c(0,0))+
+  scale_x_continuous(expand = c(0,0))
+
+```
+
+And while the sample distribution actually doesn't look too bad across years, we are missing data for 2013, which is being processed in Canada. 
+
+I expect $\delta^{15}N$ values to vary annually driven by natural variation in production of moose, ants, and berries, which will naturally alter diet and stable isotope signatures. If modeled as a trend, there is a possibility that $\delta^{15}N signatures will follow moose densities, increasing to a peak early in the time series, then slowly decreasing as hunting pressure increased and moose densities decreased. 
+
+for now, I only model year as a categorical variable as a random intercept in all models.
+
+#### Litter Size
+
+Litter size is a continuous covariate denoting how many cubs were initially seen after den emergence. Each additional cub a female produces increases her energetic and protein demands. While there is some wiggle room in this relationship mediated by a trade-off between cub number and size (quantity vs. quality) you will always need a minimum amount of protein to build a bear and two viable bear cubs will require more than a single viable bear cub. The number of cubs that make it to den emergence should be related to available maternal resources. Mothers with higher $\delta^{15}N$ signatures should have more stored protein to invest in larger litters. Alternatively, females with larger litters may become depleted in $\delta^{15}N$ as they invest more of their own protein in cub growth. Thus, the relationship between litter size and $\delta^{15}N$ may be positive or negative linear.  
+
+```{r, include=FALSE, eval=FALSE}
+
+NitroLitSize.gauss<- brm(Zd15N~Zlitsize+(1|fYR)+(1|bearID),
+               data = Cort.Repro,
+               family = gaussian(),
+               iter = 6000,
+               thin = 10)
+
+options(mc.cores = 1)
+fitN10 <- add_criterion(NitroLitSize.gauss, criterion = "loo")
+gc()
+print(fitN10$criteria$loo)
+LitSize.N.LOOic <- fitN10$criteria$loo$estimates[3,1]
+
+```
+
+
+
+```{r, include=FALSE, eval=FALSE}
+
+print(NitroGaussian.LOOic-LitSize.N.LOOic)
+
+summary(NitroLitSize.gauss)
+
+```
+There is strong evidence that litter size has a negative relationship with $\delta^{15}N$ signatures. The model with the effect of litter size explained more variation in the data than the intercept onøy model and the 95% credible interval for $\hat\beta_{LITTER}$ did not contain zero.
+
+```{r}
+
+Nitro.Litter <- function(x){
+  0.02+(-0.23*x)
+}
+
+New.Nlitter <- seq(min(Cort.Repro$Zlitsize),
+                 max(Cort.Repro$Zlitsize),
+                 length.out=273)
+
+PredNitro.Litter <- Nitro.Litter(New.Nlitter)
+
+ANew.Nlitter <- (New.Nlitter*sd(Cort.Repro$cubsfirstcount))+
+  mean(Cort.Repro$cubsfirstcount)
+APredNitro.Litter <- (PredNitro.Litter*sd(Cort.Repro$N15))+
+  mean(Cort.Repro$N15)
+
+Nitro.Litter.DF <- as.data.frame(cbind(New.Nlitter,
+                                     ANew.Nlitter,
+                                     PredNitro.Litter,
+                                     APredNitro.Litter,
+                                     Cort.Repro$cubsfirstcount,
+                                     Cort.Repro$N15,
+                                     Cort.Repro$Zd15N,
+                                     Cort.Repro$Zlitsize))
+```
+
+
+```{r, fig.height=5, fig.width=5, fig.cap="Fitted relationship of litter size predicting nitrogen signatures with observed values as points"}
+
+ggplot(data = Nitro.Litter.DF, aes(ANew.Nlitter,APredNitro.Litter))+
+  geom_line(lwd=1.2)+
+  geom_jitter(aes(V5,V6), size=2, alpha=0.45, width = 0.1)+
+  ylab(expression(paste(delta^15, "N (\u2030)", sep = "")))+
+  xlab("Litter size")+
+  scale_y_continuous(expand = c(0,0))+
+  scale_x_continuous(expand = c(0,0))
+
+```
+
+
+### Categorical Relationships
+
+#### Reproductive status
+
+Reproductive status is a binomial categorical variable noting whether a bear is solitary or accompanied by dependent offspring. Reproductive status may change diet and $\delta^{15}N$ signatures as metabolic demands change. Females reproducing will need more protein to support cub growth in utero and postpardum than females who are not reproducing. Thus, $\delta^{15}N$ may be higher on females with offspring.
+  However, offspring are vulnerable to infanticide from male bears, thus females with offspring tend to alter their movements and behavior to mitigate this risk. Thus, females with dependent offspring may forgo foraging on protein-rich foods and have $\delta^{15}N$ signatures lower than independent females. 
+  Offspring also tend to be enriched in $\delta^{15}N$ relative to dams. Mothers may preferentially route $^{15}N$ to milk while lactating. This would mean that if hypothesis 1 above is true, we might expect these effects to cancel one another out and females with dependent offspring to have $\delta^{15}N$ similar to those of solitary females. If hypothesis 2 above is correct, we would expect these to work synergystically and females with dependent offspring would have $\delta^{15}$ much lower than solitary females. 
+  Reproductive status is also going to interact with other variables, such as age, size, body condition, and cortisol)
+
+```{r, include=FALSE, eval=FALSE}
+
+NitroRepro.gauss<- brm(Zd15N~reprocat+(1|fYR)+(1|bearID),
+               data = Cort.Repro,
+               family = gaussian(),
+               iter = 6000,
+               thin = 10)
+
+summary(NitroRepro.gauss)
+options(mc.cores = 1)
+fitN9 <- add_criterion(NitroRepro.gauss, criterion = "loo")
+gc()
+print(fitN9$criteria$loo)
+ReproCat.N.LOOic <- fitN9$criteria$loo$estimates[3,1]
+
+```
+
+
+
+```{r, include=FALSE, eval=FALSE}
+
+print(NitroGaussian.LOOic-ReproCat.N.LOOic)
+
+summary(NitroRepro.gauss)
+
+```
+
+There is evidence for a difference in $\delta^{15}N$ signatures between the two reproductive categories. The model including reproductive category described more variation in the data than the intercept only($\Delta LOOic = 19.6$) and the 95% credible intervals for the beta estimates did not contain zero.
+
+```{r, fig.height=5, fig.width=5, fig.cap="Differences in Nitrogen signatures between reproductive categories"}
+
+ggplot(data = Cort.Repro, aes(reprocat,N15))+
+  geom_jitter(width = 0.01, size=2, alpha=0.45, aes(color=reprocat))+
+  geom_boxplot(aes(group=reprocat, fill=reprocat), alpha=0.6)+
+  scale_color_manual(values = c(PP[6], PP[8]),
+                     breaks = c("Sfem","Wcubs"),
+                     labels=c("Single female","With offspring"))+
+  scale_fill_manual(values = c(PP[6], PP[8]),
+                     breaks = c("Sfem","Wcubs"),
+                     labels=c("Single female","With offspring"))+
+  ylab(expression(paste(delta^15, "N (\u2030)", sep = "")))+
+  xlab("Reproductive category")+
+  labs(fill="Reproductive category", color="Reproductive category")+
+  scale_x_discrete(breaks=c("Sfem", "Wcubs"),
+                   labels=c("Single females","With cubs"))
+
+```
+
+Single females had higher $\delta^{15}N$ signatures than females with offspring, which isn't surprising because we know that females with cubs behave and forage differently than other demographic classes due to the risk of infanticide.
+
 
 ## Interpretaion of univariate models
 
